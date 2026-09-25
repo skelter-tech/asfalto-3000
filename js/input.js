@@ -6,6 +6,14 @@ export class Input {
     this.edges = new Set();
     this.steer = 0; this.throttle = false; this.brake = false; this.nitroTap = false;
     this.padPrev = [];
+    // inclinação do aparelho (volante): beta no modo deitado, gamma em pé
+    this.tiltOn = false; this.tiltInvert = false; this.tiltRaw = 0; this.tiltZero = 0; this.tiltSeen = false;
+    addEventListener('deviceorientation', (e) => {
+      if (e.beta === null || e.gamma === null) return;
+      const ang = ((((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) % 360) + 360) % 360;
+      this.tiltRaw = ang === 90 ? e.beta : ang === 270 ? -e.beta : ang === 180 ? -e.gamma : e.gamma;
+      this.tiltSeen = true;
+    });
     const map = {
       ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
       ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
@@ -24,6 +32,18 @@ export class Input {
     });
     addEventListener('keyup', (e) => { const k = map[e.code]; if (k) this.keys.delete(k); });
     addEventListener('blur', () => { this.keys.clear(); Object.keys(this.touch).forEach((k) => { this.touch[k] = false; }); });
+  }
+
+  calibrate() { this.tiltZero = this.tiltRaw; }
+
+  // iPhone pede permissão; precisa ser chamado dentro de um toque
+  async enableTilt() {
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        return (await DeviceOrientationEvent.requestPermission()) === 'granted';
+      }
+      return 'DeviceOrientationEvent' in window;
+    } catch (err) { return false; }
   }
 
   bindTouch(root) {
@@ -62,6 +82,12 @@ export class Input {
       const edge = (i, name) => { const p = b(i); if (p && !this.padPrev[i]) this.edges.add(name); this.padPrev[i] = p; };
       edge(2, 'nitro'); edge(3, 'nitro'); edge(5, 'nitro'); edge(9, 'pause'); edge(4, 'camera');
       break;
+    }
+    if (this.tiltOn && this.tiltSeen && steer === 0) {
+      let t = (this.tiltRaw - this.tiltZero) / 18;
+      if (this.tiltInvert) t = -t;
+      t = Math.abs(t) < 0.08 ? 0 : t - Math.sign(t) * 0.08;
+      steer = Math.max(-1, Math.min(1, t * 1.1));
     }
     this.steer = steer; this.throttle = throttle; this.brake = brake;
     this.nitroTap = this.edges.has('nitro');

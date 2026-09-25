@@ -151,6 +151,8 @@ function startRace(index) {
     state = 'race';
     show(null);
     $('#t-accel').hidden = save.opts.autoAccel;
+    $('#touch .t-left').hidden = save.opts.steer === 'inclinar';
+    input.calibrate();
     $('#h-lap').textContent = `1/${race.laps}`;
     audio.music(PLANETS[RACES[index].planet].music);
     setupRender();
@@ -244,6 +246,13 @@ $$('.seg').forEach((seg) => seg.querySelectorAll('button').forEach((b) => b.addE
   const k = seg.dataset.opt; let v = b.dataset.v;
   if (v === 'true') v = true; else if (v === 'false') v = false; else if (k === 'cam') v = Number(v);
   save.opts[k] = v; writeSave(save); audio.sfx('ui');
+  if (k === 'steer' && v === 'inclinar') {
+    input.enableTilt().then((ok) => {
+      if (!ok) { save.opts.steer = 'botoes'; writeSave(save); syncOptions(); }
+      input.tiltOn = save.opts.steer === 'inclinar';
+    });
+  }
+  input.tiltOn = save.opts.steer === 'inclinar'; input.tiltInvert = !!save.opts.tiltInvert;
   if (k === 'music') audio.setMusic(v);
   if (k === 'sfx') audio.setSfx(v);
   if (k === 'quality') { prScale = 1; setupRender(); }
@@ -456,12 +465,14 @@ function frame(now) {
     if (fpsAcc > 2.5) {
       const fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0;
       if (fps < 45 && prScale > 0.6) { prScale = Math.max(0.6, prScale - 0.15); setupRender(); }
+      else if (fps < 28 && save.opts.quality === 'alta') { save.opts.quality = 'leve'; writeSave(save); prScale = 1; setupRender(); msg('GRÁFICOS LEVES', 'lap'); }
       else if (fps > 58 && prScale < 1) { prScale = Math.min(1, prScale + 0.1); setupRender(); }
     }
   }
 }
 
 addEventListener('resize', setupRender);
+input.tiltOn = save.opts.steer === 'inclinar'; input.tiltInvert = !!save.opts.tiltInvert;
 // gancho para testes automatizados
 window.__asfalto = { get race() { return race; }, get state() { return state; }, input, save: () => save };
 input.bindTouch($('#touch'));

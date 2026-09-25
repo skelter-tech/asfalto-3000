@@ -8,7 +8,7 @@ function defaults() {
     upgrades: { eng: 0, acc: 0, grip: 0, nitro: 0, armor: 0 },
     color: 0,
     best: {},
-    opts: { quality: IS_TOUCH ? 'leve' : 'alta', autoAccel: IS_TOUCH, music: true, sfx: true, cam: 0 },
+    opts: { quality: IS_TOUCH ? 'leve' : 'alta', autoAccel: IS_TOUCH, music: true, sfx: true, cam: 0, steer: 'botoes', tiltInvert: false },
   };
 }
 

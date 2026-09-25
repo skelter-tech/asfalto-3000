@@ -81,6 +81,8 @@
       <div class="options">
         <div class="opt"><span>Gráficos</span><div class="seg" data-opt="quality"><button data-v="alta">Alta</button><button data-v="leve">Leve</button></div></div>
         <div class="opt"><span>Acelerar sozinho</span><div class="seg" data-opt="autoAccel"><button data-v="true">Sim</button><button data-v="false">Não</button></div></div>
+        <div class="opt"><span>Direção no celular</span><div class="seg" data-opt="steer"><button data-v="botoes">Botões</button><button data-v="inclinar">Inclinar</button></div></div>
+        <div class="opt"><span>Inverter inclinação</span><div class="seg" data-opt="tiltInvert"><button data-v="false">Não</button><button data-v="true">Sim</button></div></div>
         <div class="opt"><span>Câmera</span><div class="seg" data-opt="cam"><button data-v="0">Perto</button><button data-v="1">Alta</button></div></div>
         <div class="opt"><span>Música</span><div class="seg" data-opt="music"><button data-v="true">Liga</button><button data-v="false">Desliga</button></div></div>
         <div class="opt"><span>Efeitos sonoros</span><div class="seg" data-opt="sfx"><button data-v="true">Liga</button><button data-v="false">Desliga</button></div></div>
@@ -88,7 +90,8 @@
           <h3>Controles</h3>
           <dl>
             <dt>Teclado</dt><dd>← → ou A D para virar · ↑ ou W acelera · ↓ ou S freia · Espaço usa nitro · C troca câmera · P pausa</dd>
-            <dt>Celular</dt><dd>Botões ◀ ▶ na esquerda · NITRO e FREIO na direita · o carro acelera sozinho</dd>
+            <dt>Celular</dt><dd>Botões ◀ ▶ ou incline o aparelho como um volante (escolha em Direção) · NITRO e FREIO na direita · o carro acelera sozinho</dd>
+            <dt>Drift</dt><dd>Segure o freio numa curva em alta velocidade. Um drift longo termina com turbo</dd>
             <dt>Controle</dt><dd>Analógico vira · A ou RT acelera · B ou LT freia · X, Y ou RB nitro · Start pausa</dd>
             <dt>Largada perfeita</dt><dd>Acelere (ou toque NITRO) no último instante antes do VAI!</dd>
           </dl>
@@ -131,7 +134,7 @@
         <button data-touch="right" aria-label="Direita">▶</button>
       </div>
       <div class="t-right">
-        <button data-touch="brake" class="t-brake">FREIO</button>
+        <button data-touch="brake" class="t-brake">FREIO<small>drift</small></button>
         <button data-touch="accel" class="t-accel" id="t-accel">ACEL</button>
         <button data-touch="nitro" class="t-nitro">NITRO</button>
       </div>
