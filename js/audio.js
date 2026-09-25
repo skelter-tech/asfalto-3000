@@ -41,41 +41,65 @@ export class AudioSys {
   buildEngine() {
     const ctx = this.ctx;
     const g = this.engGain = ctx.createGain(); g.gain.value = 0;
-    const f = this.engFilter = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 5; f.frequency.value = 600;
-    f.connect(g); g.connect(this.sfxBus);
+    const f = this.engFilter = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 4; f.frequency.value = 600;
+    // saturação: dá "grão" ao ronco
+    const sh = ctx.createWaveShaper();
+    const curve = new Float32Array(1024);
+    for (let i = 0; i < 1024; i++) { const x = (i / 512) - 1; curve[i] = Math.tanh(x * 2.6); }
+    sh.curve = curve; sh.oversample = '2x';
+    f.connect(sh); sh.connect(g); g.connect(this.sfxBus);
     const o1 = this.o1 = ctx.createOscillator(); o1.type = 'sawtooth';
     const o2 = this.o2 = ctx.createOscillator(); o2.type = 'square';
     const o3 = this.o3 = ctx.createOscillator(); o3.type = 'triangle';
-    const g2 = ctx.createGain(); g2.gain.value = 0.5; const g3 = this.whineG = ctx.createGain(); g3.gain.value = 0.05;
-    o1.connect(f); o2.connect(g2); g2.connect(f); o3.connect(g3); g3.connect(g);
-    o1.start(); o2.start(); o3.start();
+    const sub = this.sub = ctx.createOscillator(); sub.type = 'sine';
+    const g2 = ctx.createGain(); g2.gain.value = 0.45;
+    const g3 = this.whineG = ctx.createGain(); g3.gain.value = 0.04;
+    const gs = ctx.createGain(); gs.gain.value = 0.7;
+    o1.connect(f); o2.connect(g2); g2.connect(f); sub.connect(gs); gs.connect(f); o3.connect(g3); g3.connect(g);
+    o1.start(); o2.start(); o3.start(); sub.start();
     // turbina (nitro)
     const tb = this.turbo = ctx.createOscillator(); tb.type = 'sine'; tb.frequency.value = 1800;
     this.turboG = ctx.createGain(); this.turboG.gain.value = 0; tb.connect(this.turboG); this.turboG.connect(this.sfxBus); tb.start();
-    // ronco na terra
-    const n = ctx.createBufferSource(); n.buffer = this.noise; n.loop = true;
-    const nf = ctx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 380;
-    this.offG = ctx.createGain(); this.offG.gain.value = 0;
-    n.connect(nf); nf.connect(this.offG); this.offG.connect(this.sfxBus); n.start();
+    const loopNoise = (type, freq, q) => {
+      const n = ctx.createBufferSource(); n.buffer = this.noise; n.loop = true;
+      const nf = ctx.createBiquadFilter(); nf.type = type; nf.frequency.value = freq; nf.Q.value = q;
+      const gg = ctx.createGain(); gg.gain.value = 0;
+      n.connect(nf); nf.connect(gg); gg.connect(this.sfxBus); n.start(Math.random());
+      return { gain: gg, filter: nf };
+    };
+    this.off = loopNoise('lowpass', 380, 1);          // ronco na terra
+    this.wind = loopNoise('bandpass', 900, 0.6);       // vento
+    this.screech = loopNoise('bandpass', 2300, 7);     // pneu cantando
+    this.lastLoad = 0;
   }
 
-  engine(rpm, load, speed, boost, offroad) {
+  engine(rpm, load, speed, boost, offroad, drift = 0) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    const fr = 48 + rpm * 118 + speed * 20;
+    const fr = 46 + rpm * 120 + speed * 22;
     this.o1.frequency.setTargetAtTime(fr, t, 0.03);
     this.o2.frequency.setTargetAtTime(fr * 0.5, t, 0.03);
+    this.sub.frequency.setTargetAtTime(fr * 0.5, t, 0.03);
     this.o3.frequency.setTargetAtTime(fr * 3.02, t, 0.03);
-    this.engFilter.frequency.setTargetAtTime(300 + load * 1100 + rpm * 900, t, 0.05);
-    this.engGain.gain.setTargetAtTime(0.1 + load * 0.08, t, 0.05);
+    this.engFilter.frequency.setTargetAtTime(280 + load * 1200 + rpm * 1000, t, 0.05);
+    this.engGain.gain.setTargetAtTime(0.07 + load * 0.06, t, 0.05);
     this.turboG.gain.setTargetAtTime(boost ? 0.035 : 0, t, 0.1);
     this.turbo.frequency.setTargetAtTime(1500 + rpm * 1400, t, 0.05);
-    this.offG.gain.setTargetAtTime(offroad * 0.5, t, 0.05);
+    this.off.gain.gain.setTargetAtTime(offroad * 0.5, t, 0.05);
+    this.wind.gain.gain.setTargetAtTime(speed * speed * 0.22, t, 0.1);
+    this.wind.filter.frequency.setTargetAtTime(600 + speed * 900, t, 0.1);
+    this.screech.gain.gain.setTargetAtTime(drift * 0.16, t, 0.05);
+    this.screech.filter.frequency.setTargetAtTime(2100 + Math.sin(t * 23) * 250, t, 0.02);
+    // tirou o pé em giro alto: estouros no escapamento
+    if (this.lastLoad > 0.8 && load < 0.5 && rpm > 0.6 && this.sfxOn) {
+      for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) this.noiseHit(0.05, 0.35 + Math.random() * 0.2, 'lowpass', 1100, 300, 0.05 + i * (0.06 + Math.random() * 0.08));
+    }
+    this.lastLoad = load;
   }
   engineOff() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.engGain.gain.setTargetAtTime(0, t, 0.08); this.turboG.gain.setTargetAtTime(0, t, 0.08); this.offG.gain.setTargetAtTime(0, t, 0.08);
+    for (const gg of [this.engGain.gain, this.turboG.gain, this.off.gain.gain, this.wind.gain.gain, this.screech.gain.gain]) gg.setTargetAtTime(0, t, 0.08);
   }
 
   // ---------------------------------------------------------------- efeitos
@@ -112,6 +136,7 @@ export class AudioSys {
       case 'finish': [0, 4, 7, 12, 16, 19, 24].forEach((n, i) => this.tone('square', mtof(64 + n), mtof(64 + n), 0.22, 0.14, i * 0.08)); break;
       case 'ui': this.tone('square', 880, 880, 0.04, 0.08); break;
       case 'buy': [0, 7, 12, 19].forEach((n, i) => this.tone('triangle', mtof(76 + n), mtof(76 + n), 0.14, 0.22, i * 0.06)); break;
+      case 'land': this.noiseHit(0.3, 0.8, 'lowpass', 600, 80); this.tone('sine', 90, 38, 0.3, 0.7); break;
       case 'scrape': this.noiseHit(0.22, 0.35, 'bandpass', 3200, 1800, 0, this.sfxBus, 4); break;
       case 'deny': this.tone('square', 180, 120, 0.2, 0.15); break;
       default: break;

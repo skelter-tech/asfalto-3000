@@ -93,6 +93,8 @@ export class Race {
     const planet = world.planet;
     this.dust = new Particles(this.scene, 220, planet.dust, 1.4, false);
     this.sparks = new Particles(this.scene, 120, new THREE.Color(3, 2, 0.8), 0.5, true);
+    this.smoke = new Particles(this.scene, 160, '#e8e8ee', 2.2, false);
+    this.speedFx = 0;
     this.buildPickups();
     this.placeAll(0);
   }
@@ -191,10 +193,11 @@ export class Race {
     }
     this.shake = Math.max(0, this.shake - dt * 2.5);
     this.placeAll(dt);
-    this.dust.update(dt); this.sparks.update(dt);
+    this.dust.update(dt); this.sparks.update(dt); this.smoke.update(dt);
     if (P && racing && !this.done) {
       const boosting = P.nitroT > 0 || P.boostT > 0;
-      this.audio.engine(P.rpm, P.throttle ? 1 : 0.2, P.v / 90, boosting, P.offroad ? Math.min(1, P.v / 40) : 0);
+      this.audio.engine(P.air ? Math.min(1.08, P.rpm + 0.2) : P.rpm, P.throttle ? 1 : 0.2, P.v / 90, boosting, P.offroad ? Math.min(1, P.v / 40) : 0, P.drift ? 1 : 0);
+      this.speedFx = boosting ? 1 : clamp((P.v / P.vmax - 0.8) * 3, 0, 0.5);
     }
   }
 
@@ -208,10 +211,21 @@ export class Race {
     if (input) {
       throttle = input.throttle || opts.autoAccel;
       brake = input.brake;
-      if (brake && opts.autoAccel) throttle = false;
       steerT = input.steer;
       const rate = steerT === 0 ? 9 : Math.sign(steerT) !== Math.sign(c.steer) ? 12 : 6;
       c.steer += clamp(steerT - c.steer, -rate * dt, rate * dt);
+      const drifting = brake && Math.abs(c.steer) > 0.5 && c.v > 38 && !c.air;
+      if (drifting) { c.driftT = (c.driftT || 0) + dt; }
+      else if (c.drift) {
+        if (c.driftT > 0.9) {
+          c.boostT = Math.max(c.boostT, Math.min(1.8, 0.4 + c.driftT * 0.5));
+          this.events.push({ type: 'msg', text: c.driftT > 2 ? 'SUPER DRIFT!' : 'DRIFT!', kind: 'boost' });
+          this.audio.sfx('boost');
+        }
+        c.driftT = 0;
+      }
+      c.drift = drifting;
+      if (brake && opts.autoAccel && !drifting) throttle = false;
       if (input.nitroTap && c.nitro > 0 && c.nitroT <= 0 && c.energy > 0) {
         c.nitro--; c.nitroT = 3.2; this.audio.sfx('nitro');
         this.events.push({ type: 'nitro' });
@@ -240,15 +254,16 @@ export class Race {
     } else {
       c.v -= (2.5 + c.v * 0.012) * dt;
     }
-    if (brake) c.v -= 40 * dt;
+    if (brake) c.v -= (c.drift ? 9 : 40) * dt;
     c.v -= slope * 9.8 * 0.35 * dt;
     if (c.v > vmax) c.v = Math.max(vmax, c.v - (c.offroad ? 30 : 12) * dt);
     c.v = Math.max(0, c.v);
 
     if (c.isPlayer && !c.aiDriven) {
-      const lat = 12.5 * Math.min(1, c.v / 26);
+      const lat = 12.5 * Math.min(1, c.v / 26) * (c.air ? 0.35 : 1);
       c.x += c.steer * lat * dt;
-      c.x -= k * c.v * c.v * c.cf * dt;
+      c.x -= k * c.v * c.v * c.cf * (c.drift ? 0.45 : 1) * dt;
+      if (c.drift) { this.emitSmoke(c); if (Math.random() < 0.1) this.events.push({ type: 'buzz' }); }
       const walled = tr.tfAt(s) || tr.bfAt(s) > 0.05;
       const lim = walled ? EDGE - 0.35 : EDGE + 9;
       if (Math.abs(c.x) > lim) {
@@ -280,11 +295,50 @@ export class Race {
     c.backfire = Math.max(0, c.backfire - dt);
 
     // visual
-    const yawT = c.steer * 0.14 + clamp(k * c.v * 1.2, -0.12, 0.12);
+    const yawT = c.steer * 0.14 + clamp(k * c.v * 1.2, -0.12, 0.12) + (c.drift ? Math.sign(c.steer) * 0.34 : 0);
     c.yawVis += (yawT - c.yawVis) * Math.min(1, dt * 8);
     c.roll += (-c.steer * 0.04 * Math.min(1, c.v / 50) - c.roll) * Math.min(1, dt * 6);
-    c.pitch += ((brake ? 0.025 : throttle && c.v < c.vmax * 0.6 ? -0.02 : 0) - c.pitch) * Math.min(1, dt * 5);
+    const pitchT = c.air ? clamp(-c.vyAbs * 0.012, -0.12, 0.12) : brake && !c.drift ? 0.025 : throttle && c.v < c.vmax * 0.6 ? -0.02 : 0;
+    c.pitch += (pitchT - c.pitch) * Math.min(1, dt * 5);
     c.dist += c.v * dt;
+    this.vertical(c, dt);
+  }
+
+  // Altura real do carro: segue a pista, mas decola quando a crista cai mais rápido que a gravidade.
+  vertical(c, dt) {
+    const tr = this.track;
+    const sm = tr.sample(c.dist);
+    const ax = Math.abs(c.x);
+    const gy = ax > EDGE ? tr.terrainY(sm.y, ax, tr.bfAt(c.dist)) : sm.y;
+    const G = 9.8 * 1.7;
+    if (c.yAbs === undefined || dt <= 0) { c.yAbs = gy; c.vyAbs = 0; c.gyPrev = gy; c.air = false; return; }
+    if (c.air) {
+      c.vyAbs -= G * dt; c.yAbs += c.vyAbs * dt; c.airT += dt;
+      if (c.yAbs <= gy) {
+        c.yAbs = gy; c.air = false;
+        if (c.isPlayer && c.airT > 0.25) {
+          this.shake = Math.max(this.shake, Math.min(0.9, 0.3 + c.airT * 0.6));
+          this.audio.sfx('land'); this.events.push({ type: 'land' });
+          for (let i = 0; i < 10; i++) this.emitDust(c);
+          if (c.airT > 1.1) this.events.push({ type: 'msg', text: 'QUE SALTO!', kind: 'good' });
+        }
+        c.vyAbs = (gy - c.gyPrev) / dt;
+      }
+    } else {
+      const vyRoad = (gy - c.gyPrev) / dt;
+      if (c.v > 40 && vyRoad < c.vyAbs - G * dt - 0.06) {
+        c.air = true; c.airT = 0; c.vyAbs -= G * dt; c.yAbs += c.vyAbs * dt;
+      } else { c.yAbs = gy; c.vyAbs = vyRoad; }
+    }
+    c.gyPrev = gy;
+  }
+
+  emitSmoke(c) {
+    const sm = this.track.sample(c.dist - 1.6);
+    for (const side of [-0.85, 0.85]) {
+      const x = sm.x + sm.rx * (c.x + side), z = sm.z + sm.rz * (c.x + side);
+      this.smoke.emit(x, c.yAbs + 0.3, z, (Math.random() - 0.5) * 2 - sm.tx * c.v * 0.15, 0.8 + Math.random(), (Math.random() - 0.5) * 2 - sm.tz * c.v * 0.15, 0.7 + Math.random() * 0.4);
+    }
   }
 
   ai(c, dt, s, k) {
@@ -442,7 +496,7 @@ export class Race {
   emitDust(c) {
     const sm = this.track.sample(c.dist - 2);
     const x = sm.x + sm.rx * c.x, z = sm.z + sm.rz * c.x;
-    const y = this.track.terrainY(sm.y, Math.abs(c.x)) + 0.4;
+    const y = (c.yAbs !== undefined ? c.yAbs : this.track.terrainY(sm.y, Math.abs(c.x))) + 0.4;
     this.dust.emit(x + (Math.random() - 0.5) * 2, y, z + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 4 - sm.tx * c.v * 0.1, 1 + Math.random() * 2, (Math.random() - 0.5) * 4 - sm.tz * c.v * 0.1, 0.6 + Math.random() * 0.5);
   }
 
@@ -460,7 +514,9 @@ export class Race {
       xa.crossVectors(u, fx).normalize();
       m.makeBasis(xa, u, fx);
       const ax = Math.abs(c.x);
-      const y = ax > EDGE ? tr.terrainY(sm.y, ax, tr.bfAt(c.dist)) : sm.y;
+      const gy = ax > EDGE ? tr.terrainY(sm.y, ax, tr.bfAt(c.dist)) : sm.y;
+      const y = c.yAbs !== undefined ? c.yAbs : gy;
+      if (c.model.shadow) { const hgt = Math.max(0, y - gy); c.model.shadow.position.y = 0.04 - hgt; c.model.shadow.material.opacity = 0.8 / (1 + hgt * 0.5); }
       const root = c.model.root;
       root.position.set(sm.x + sm.rx * c.x, y, sm.z + sm.rz * c.x);
       root.quaternion.setFromRotationMatrix(m);
@@ -496,18 +552,28 @@ export class Race {
     const portrait = aspect < 1;
     const dist = (far ? 10.5 : 7.4) * (portrait ? 1.25 : 1);
     const h = (far ? 3.9 : 2.55) * (portrait ? 1.15 : 1);
-    this.camX += (c.x * 0.82 - this.camX) * Math.min(1, dt * 7);
+    this.camX += (c.x * 0.8 - this.camX) * Math.min(1, dt * 5);
     const a = tr.sample(c.dist - dist, {});
     const b = tr.sample(c.dist + 14, {});
+    const cr = tr.sample(c.dist, {});
+    const lift = c.yAbs !== undefined ? c.yAbs - cr.y : 0; // altura do carro acima da pista
     const ya = Math.max(a.y, tr.terrainY(a.y, Math.abs(this.camX)));
-    const sh = this.shake;
-    cam.position.set(a.x + a.rx * this.camX + (Math.random() - 0.5) * sh * 0.25, ya + h + (Math.random() - 0.5) * sh * 0.2, a.z + a.rz * this.camX);
-    cam.up.set(0, 1, 0);
-    cam.lookAt(b.x + b.rx * c.x * 0.9, b.y + 1.1, b.z + b.rz * c.x * 0.9);
-    cam.rotateZ(-c.steer * 0.018);
+    // altura com mola: a câmera chega atrasada nas cristas e nos vales
+    const yT = ya + h + lift * 0.75;
+    this.camY = this.camY === undefined || Math.abs(this.camY - yT) > 30 ? yT : this.camY + (yT - this.camY) * Math.min(1, dt * 4.5);
+    const camY = Math.max(this.camY, ya + 1.1);
+    const speed = Math.min(1, c.v / 95);
     const boosting = c.nitroT > 0 || c.boostT > 0;
+    const sh = this.shake + Math.max(0, speed - 0.7) * 0.5 + (boosting ? 0.18 : 0);
+    const jx = (Math.random() - 0.5) * sh * 0.22, jy = (Math.random() - 0.5) * sh * 0.16;
+    cam.position.set(a.x + a.rx * this.camX + jx, camY + jy, a.z + a.rz * this.camX);
+    cam.up.set(0, 1, 0);
+    const lean = c.steer * 1.6 + (c.drift ? Math.sign(c.steer) * 1.2 : 0);
+    const lx = c.x * 0.9 + lean;
+    cam.lookAt(b.x + b.rx * lx, b.y + 1.1 + lift * 0.5, b.z + b.rz * lx);
+    cam.rotateZ(-c.steer * 0.03 - (c.drift ? Math.sign(c.steer) * 0.02 : 0));
     const base = portrait ? 78 : 60;
-    const fovT = base + Math.min(1, c.v / 90) * 9 + (boosting ? 9 : 0);
+    const fovT = base + speed * 13 + (boosting ? 11 : 0) + (c.air ? 3 : 0);
     this.fov += (fovT - this.fov) * Math.min(1, dt * 3);
     if (Math.abs(cam.fov - this.fov) > 0.01) { cam.fov = this.fov; cam.updateProjectionMatrix(); }
   }

@@ -196,7 +196,7 @@ export function createCar(hex, { player = false, night = false, quality = 'alta'
       o.material.transparent = true; o.material.opacity = 0.32; o.material.depthWrite = false;
     });
   }
-  return { root, body, wheels, steerers, flames, tailMat, paint };
+  return { root, body, wheels, steerers, flames, tailMat, paint, shadow };
 }
 
 // ------------------------------------------------------------------ cenário

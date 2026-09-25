@@ -116,7 +116,7 @@ function show(id) {
   $('#hud').hidden = !racing && id !== '#scr-pause';
   $('#touch').hidden = !(racing && IS_TOUCH);
   input.capture = racing;
-  if (id !== null) $('#speedlines').classList.remove('on');
+  if (id !== null) $('#speedlines').style.opacity = 0;
   $$('.credits').forEach((e) => { e.textContent = save.credits.toLocaleString('pt-BR'); });
 }
 
@@ -381,6 +381,8 @@ function msg(text, kind) {
 function updateHud() {
   const P = race.player;
   for (const e of race.events.splice(0)) {
+    const vib = { hit: 35, land: 60, nitro: 25, buzz: 8 }[e.type];
+    if (vib) { try { navigator.vibrate?.(vib); } catch (err) { /* sem vibração */ } }
     if (e.type === 'count') {
       const cnt = $('#count'); cnt.hidden = false;
       const lights = [...cnt.querySelectorAll('i')];
@@ -412,7 +414,7 @@ function updateHud() {
   if (lastHud.en !== en) { lastHud.en = en; const e = $('#h-energy'); e.style.width = en + '%'; e.classList.toggle('low', en < 25); }
   const nk = `${P.nitro}/${P.nitroMax}`;
   if (lastHud.nk !== nk) { lastHud.nk = nk; $('#h-nitro').innerHTML = Array.from({ length: Math.max(P.nitro, P.nitroMax) }, (_, i) => `<i class="${i < P.nitro ? '' : 'off'}"></i>`).join(''); }
-  $('#speedlines').classList.toggle('on', P.nitroT > 0 || P.boostT > 0);
+  $('#speedlines').style.opacity = race.speedFx.toFixed(2);
   drawMinimap();
 }
 
