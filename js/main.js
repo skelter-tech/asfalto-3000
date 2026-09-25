@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GradePass } from './gradepass.js';
 import { PLANETS, RACES, UPGRADES, UPGRADE_COST, MAX_LEVEL, CAR_COLORS, PRIZES, COIN_VALUE, isUnlocked } from './data.js';
 import { loadSave, writeSave, resetSave, IS_TOUCH } from './save.js';
 import { buildWorld } from './world.js';
@@ -42,8 +43,8 @@ function setupRender() {
       const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4 });
       composer = new EffectComposer(renderer, rt);
       renderPass = new RenderPass(new THREE.Scene(), camera);
-      bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.65, 0.45, 1.0);
-      composer.addPass(renderPass); composer.addPass(bloom); composer.addPass(new OutputPass());
+      bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.4, 0.97);
+      composer.addPass(renderPass); composer.addPass(bloom); composer.addPass(new GradePass()); composer.addPass(new OutputPass());
     }
     composer.setPixelRatio(basePixelRatio() * prScale);
     composer.setSize(w, h);

@@ -92,12 +92,23 @@ function carGeometries() {
   return CAR;
 }
 
+let OUTLINE_MAT = null;
+function outlineMat() {
+  if (!OUTLINE_MAT) OUTLINE_MAT = new THREE.MeshBasicMaterial({ color: '#0c0c14', side: THREE.BackSide });
+  return OUTLINE_MAT;
+}
+function outline(geo, scale) {
+  const m = new THREE.Mesh(geo, outlineMat());
+  m.scale.setScalar(scale);
+  return m;
+}
+
 export function createCar(hex, { player = false, night = false } = {}) {
   const G = carGeometries();
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
-  const paint = new THREE.MeshPhongMaterial({ color: hex, specular: '#777777', shininess: 70, flatShading: true, vertexColors: true });
+  const paint = new THREE.MeshPhongMaterial({ color: hex, specular: '#ffffff', shininess: 130, flatShading: true, vertexColors: true });
   if (night) paint.emissive = new THREE.Color(hex).multiplyScalar(0.18);
   body.add(new THREE.Mesh(G.body, paint));
   body.add(new THREE.Mesh(G.cabin, G.glassMat));
@@ -106,12 +117,17 @@ export function createCar(hex, { player = false, night = false } = {}) {
   const tailMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.08, 0.1) });
   body.add(new THREE.Mesh(G.tail, tailMat));
   body.add(new THREE.Mesh(G.head, G.headMat));
+  // contorno preto (casco invertido) — o traço de carrinho de brinquedo do gênero
+  body.add(outline(G.body, 1.028));
+  body.add(outline(G.cabin, 1.05));
+  body.add(outline(G.wing, 1.05));
 
   const wheels = [], steerers = [];
   for (const [x, z, front] of [[0.86, 1.45, true], [-0.86, 1.45, true], [0.86, -1.42, false], [-0.86, -1.42, false]]) {
     const pivot = new THREE.Group(); pivot.position.set(x, 0.37, z);
     const w = new THREE.Mesh(G.wheel, G.wheelMat);
-    pivot.add(w); root.add(pivot);
+    pivot.add(w); pivot.add(outline(G.wheel, 1.16));
+    root.add(pivot);
     wheels.push(w); if (front) steerers.push(pivot);
   }
 
