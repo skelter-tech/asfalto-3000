@@ -239,7 +239,8 @@ export class Race {
       throttle = input.throttle || opts.autoAccel;
       brake = input.brake;
       steerT = input.steer;
-      const rate = steerT === 0 ? 9 : Math.sign(steerT) !== Math.sign(c.steer) ? 12 : 6;
+      // volante progressivo: vira devagar no começo e volta ao centro sem estalo
+      const rate = steerT === 0 ? 3.2 : Math.sign(steerT) !== Math.sign(c.steer) ? 5 : 2.6 + Math.abs(c.steer) * 1.6;
       c.steer += clamp(steerT - c.steer, -rate * dt, rate * dt);
       const drifting = brake && Math.abs(c.steer) > 0.5 && c.v > 38 && !c.air;
       if (drifting) { c.driftT = (c.driftT || 0) + dt; }
@@ -288,7 +289,10 @@ export class Race {
 
     if (c.isPlayer && !c.aiDriven) {
       const lat = 12.5 * Math.min(1, c.v / 26) * (c.air ? 0.35 : 1);
-      c.x += c.steer * lat * dt;
+      // inércia lateral: o carro ganha velocidade de lado aos poucos
+      const latT = c.steer * Math.abs(c.steer) * 0.35 * lat + c.steer * 0.65 * lat;
+      c.latV = (c.latV || 0) + (latT - (c.latV || 0)) * Math.min(1, dt * 4.5);
+      c.x += c.latV * dt;
       c.x -= k * c.v * c.v * c.cf * (c.drift ? 0.45 : 1) * dt;
       if (c.drift) { this.emitSmoke(c); if (Math.random() < 0.1) this.events.push({ type: 'buzz' }); }
       const walled = tr.tfAt(s) || tr.bfAt(s) > 0.05;
@@ -323,7 +327,7 @@ export class Race {
 
     // visual
     const yawT = c.steer * 0.14 + clamp(k * c.v * 1.2, -0.12, 0.12) + (c.drift ? Math.sign(c.steer) * 0.34 : 0);
-    c.yawVis += (yawT - c.yawVis) * Math.min(1, dt * 8);
+    c.yawVis += (yawT - c.yawVis) * Math.min(1, dt * 4.5);
     c.roll += (-c.steer * 0.04 * Math.min(1, c.v / 50) - c.roll) * Math.min(1, dt * 6);
     const pitchT = c.air ? clamp(-c.vyAbs * 0.012, -0.12, 0.12) : brake && !c.drift ? 0.025 : throttle && c.v < c.vmax * 0.6 ? -0.02 : 0;
     c.pitch += (pitchT - c.pitch) * Math.min(1, dt * 5);
@@ -623,7 +627,7 @@ export class Race {
     const portrait = aspect < 1;
     const dist = (far ? 10.5 : 7.4) * (portrait ? 1.25 : 1);
     const h = (far ? 3.9 : 2.55) * (portrait ? 1.15 : 1);
-    this.camX += (c.x * 0.8 - this.camX) * Math.min(1, dt * 5);
+    this.camX += (c.x * 0.8 - this.camX) * Math.min(1, dt * 3.5);
     const a = tr.sample(c.dist - dist, {});
     const b = tr.sample(c.dist + 14, {});
     const cr = tr.sample(c.dist, {});
@@ -639,10 +643,11 @@ export class Race {
     const jx = (Math.random() - 0.5) * sh * 0.22, jy = (Math.random() - 0.5) * sh * 0.16;
     cam.position.set(a.x + a.rx * this.camX + jx, camY + jy, a.z + a.rz * this.camX);
     cam.up.set(0, 1, 0);
-    const lean = c.steer * 1.6 + (c.drift ? Math.sign(c.steer) * 1.2 : 0);
-    const lx = c.x * 0.9 + lean;
+    const leanT = c.steer * 1.1 + (c.drift ? Math.sign(c.steer) * 1.0 : 0);
+    this.camLean = (this.camLean || 0) + (leanT - (this.camLean || 0)) * Math.min(1, dt * 2.5);
+    const lx = c.x * 0.9 + this.camLean;
     cam.lookAt(b.x + b.rx * lx, b.y + 1.1 + lift * 0.5, b.z + b.rz * lx);
-    cam.rotateZ(-c.steer * 0.03 - (c.drift ? Math.sign(c.steer) * 0.02 : 0));
+    cam.rotateZ(-this.camLean * 0.018);
     const base = portrait ? 78 : 60;
     const fovT = base + speed * 13 + (boosting ? 11 : 0) + (c.air ? 3 : 0);
     this.fov += (fovT - this.fov) * Math.min(1, dt * 3);
