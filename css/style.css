@@ -142,6 +142,12 @@ button { font: inherit; color: inherit; }
 .controls-help dt { font-weight: 700; color: var(--sun); }
 .controls-help dd { margin: 0; color: #dcd8f0; }
 #btn-reset { align-self: flex-start; transform: none; }
+.champ-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.champ-top .sub { margin: 0; }
+.tt { display: flex; gap: 10px; align-items: baseline; font-weight: 700; font-size: 14px; letter-spacing: 0.06em; }
+.tt b { font-size: 18px; }
+.tt b.ahead { color: var(--good); } .tt b.behind { color: var(--bad); }
+.race .ttime { font-weight: 700; font-size: 13px; color: var(--sun); font-variant-numeric: tabular-nums; }
 
 /* ---------- HUD ---------- */
 #hud { position: absolute; inset: 0; pointer-events: none; font-variant-numeric: tabular-nums; }

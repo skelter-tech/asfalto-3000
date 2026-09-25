@@ -108,6 +108,8 @@ const showroom = (() => {
 let state = 'loading';
 let world = null, race = null, raceIndex = 0, attractIdx = 0;
 let paused = false;
+let mode = 'camp';
+const fmtT = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
 const screens = ['#loading', '#scr-title', '#scr-menu', '#scr-champ', '#scr-garage', '#scr-options', '#scr-pause', '#scr-results'];
 
 function show(id) {
@@ -124,7 +126,7 @@ function loadWorld(index, attract) {
   if (race) { race.dispose(); race = null; }
   if (world) { world.dispose(); world = null; }
   world = buildWorld(RACES[index], renderer, save.opts.quality);
-  race = new Race({ world, index, save, audio, attract, quality: save.opts.quality });
+  race = new Race({ world, index, save, audio, attract, quality: save.opts.quality, timeTrial: !attract && mode === 'tt' });
   if (!attract) drawMinimapBase();
 }
 
@@ -133,7 +135,7 @@ function goAttract() {
   const unlocked = RACES.map((_, i) => i).filter((i) => isUnlocked(save, i));
   const idx = unlocked[attractIdx % unlocked.length];
   loadWorld(idx, true);
-  audio.engineOff();
+  audio.engineOff(); audio.weather(null);
   audio.music(PLANETS[RACES[idx].planet].music);
 }
 
@@ -155,6 +157,8 @@ function startRace(index) {
     input.calibrate();
     $('#h-lap').textContent = `1/${race.laps}`;
     audio.music(PLANETS[RACES[index].planet].music);
+    audio.weather(world.weather);
+    $('.pos').hidden = race.tt; $('#h-tt').hidden = !race.tt;
     setupRender();
   });
 }
@@ -184,7 +188,10 @@ function buildChamp() {
       const best = save.best[r.id];
       const b = document.createElement('button');
       b.className = 'race'; b.disabled = !un;
-      const medal = !un ? '<span class="medal lock">🔒</span>' : best ? `<span class="medal ${best <= 3 ? 'p' + best : 'px'}">${best}º</span>` : '<span class="medal px">—</span>';
+      const rec = save.tt && save.tt[r.id];
+      const medal = !un ? '<span class="medal lock">🔒</span>'
+        : mode === 'tt' ? `<span class="ttime">${rec ? fmtT(rec.best) : '—'}</span>`
+        : best ? `<span class="medal ${best <= 3 ? 'p' + best : 'px'}">${best}º</span>` : '<span class="medal px">—</span>';
       b.innerHTML = `<span class="n">${k + 1}</span><span><span class="nm">${r.name}</span><span class="tm">${r.time} · ${r.laps} voltas</span></span>${medal}`;
       b.addEventListener('click', () => { audio.sfx('ui'); startRace(i); });
       list.appendChild(b);
@@ -266,6 +273,12 @@ $('#btn-reset').addEventListener('click', (e) => {
 });
 
 // ------------------------------------------------------------------ navegação
+$$('#mode-seg button').forEach((b) => b.addEventListener('click', () => {
+  mode = b.dataset.mode; audio.sfx('ui');
+  $$('#mode-seg button').forEach((x) => x.classList.toggle('on', x === b));
+  $('#mode-sub').textContent = mode === 'tt' ? 'Sozinho na pista contra o fantasma da sua melhor volta.' : 'Termine no pódio (até 3º) para liberar a próxima pista.';
+  buildChamp();
+}));
 $$('[data-go]').forEach((b) => b.addEventListener('click', () => {
   audio.unlock(); audio.sfx('ui');
   const go = b.dataset.go;
@@ -274,6 +287,7 @@ $$('[data-go]').forEach((b) => b.addEventListener('click', () => {
   if (go === 'options') { syncOptions(); resetArmed = false; $('#btn-reset').textContent = 'Apagar progresso'; toMenu('#scr-options'); }
   if (go === 'garage') openGarage();
   if (go === 'quick') {
+    mode = 'camp'; $$('#mode-seg button').forEach((x) => x.classList.toggle('on', x.dataset.mode === 'camp'));
     const un = RACES.map((_, i) => i).filter((i) => isUnlocked(save, i));
     startRace(un[Math.floor(Math.random() * un.length)]);
   }
@@ -296,7 +310,7 @@ $('#btn-fullscreen').addEventListener('click', async () => {
 $('#btn-pause').addEventListener('click', () => setPause(true));
 $('#btn-resume').addEventListener('click', () => setPause(false));
 $('#btn-restart').addEventListener('click', () => startRace(raceIndex));
-$('#btn-quit').addEventListener('click', () => { audio.engineOff(); toMenu('#scr-menu'); });
+$('#btn-quit').addEventListener('click', () => { audio.engineOff(); audio.weather(null); toMenu('#scr-menu'); });
 $('#btn-next').addEventListener('click', () => startRace(Math.min(raceIndex + 1, RACES.length - 1)));
 $('#btn-again').addEventListener('click', () => startRace(raceIndex));
 $('#btn-res-garage').addEventListener('click', () => { goAttract(); openGarage(); });
@@ -314,7 +328,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) setPa
 // ------------------------------------------------------------------ resultado
 function finishRace(res) {
   state = 'results';
-  audio.engineOff();
+  audio.engineOff(); audio.weather(null);
+  if (res.tt) return finishTT(res);
   const def = RACES[raceIndex];
   const prize = Math.round(PRIZES[res.pos - 1] * (1 + raceIndex * 0.12) / 10) * 10;
   const coinCr = res.coins * COIN_VALUE;
@@ -340,6 +355,28 @@ function finishRace(res) {
   else if (!nextOk) { note.textContent = 'Chegue até o 3º lugar para liberar a próxima pista. Melhorias na garagem ajudam.'; note.className = 'res-note bad'; }
   else { note.textContent = ''; note.className = 'res-note'; }
   $('#btn-next').hidden = !nextOk;
+  show('#scr-results');
+}
+
+function finishTT(res) {
+  const def = RACES[raceIndex];
+  const coinCr = res.coins * COIN_VALUE;
+  save.credits += coinCr;
+  writeSave(save);
+  $('#res-track').textContent = `Contra o relógio · ${PLANETS[def.planet].name} · ${def.name}`;
+  $('#res-title').textContent = fmtT(res.total);
+  const best = Math.min(...res.lapTimes);
+  $('#res-table').innerHTML = res.lapTimes.map((t, i) =>
+    `<li class="${t === best ? 'me' : ''}"><span class="p">${i + 1}</span><span class="c" style="background:${CAR_COLORS[save.color].hex}"></span><span>Volta ${i + 1}</span><span class="t">${fmtT(t)}</span></li>`).join('');
+  $('#res-prize').textContent = '—';
+  $('#res-coins').textContent = `${res.coins} × ${COIN_VALUE} = ${coinCr.toLocaleString('pt-BR')}`;
+  $('#res-total').textContent = '+' + coinCr.toLocaleString('pt-BR');
+  $('#res-lap').textContent = fmtT(best);
+  const note = $('#res-note');
+  const isRec = res.ttBest !== null && Math.abs(res.ttBest - best) < 1e-6;
+  note.textContent = isRec ? `Recorde da pista: ${fmtT(res.ttBest)}. Na próxima, o fantasma corre essa volta.` : `Recorde da pista: ${fmtT(res.ttBest)}. Faltou ${(best - res.ttBest).toFixed(2)} s.`;
+  note.className = 'res-note ' + (isRec ? 'good' : '');
+  $('#btn-next').hidden = true;
   show('#scr-results');
 }
 
@@ -406,7 +443,7 @@ function updateHud() {
       }
     } else if (e.type === 'msg') msg(e.text, e.kind);
     else if (e.type === 'nitro') msg('NITRO!', 'nitro');
-    else if (e.type === 'finish') msg(e.pos === 1 ? 'VITÓRIA!' : `${e.pos}º LUGAR`, e.pos <= 3 ? 'good' : 'lap');
+    else if (e.type === 'finish') msg(race.tt ? 'CHEGADA!' : e.pos === 1 ? 'VITÓRIA!' : `${e.pos}º LUGAR`, e.pos <= 3 ? 'good' : 'lap');
   }
   if (!P) return;
   const posEl = $('#h-pos');
@@ -415,6 +452,12 @@ function updateHud() {
   const t = race.time, m = Math.floor(t / 60);
   setText('#h-time', `${m}:${(t - m * 60).toFixed(2).padStart(5, '0')}`);
   setText('#h-speed', String(Math.round(P.v * 3.6)));
+  if (race.tt) {
+    setText('#h-ttbest', race.ttBest !== null ? `Recorde ${fmtT(race.ttBest)}` : 'Recorde —');
+    const d = race.ttDelta, el = $('#h-ttdelta');
+    const txt = d === null ? '' : `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}s`;
+    if (lastHud.dl !== txt) { lastHud.dl = txt; el.textContent = txt; el.className = d === null ? '' : d > 0 ? 'behind' : 'ahead'; }
+  }
   setText('#h-gear', String(P.gear));
   setText('#h-coins', String(race.coins));
   const on = Math.round(P.rpm / 1.08 * rpmBars.length);

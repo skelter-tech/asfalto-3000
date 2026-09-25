@@ -12,7 +12,7 @@ Roda no computador e no celular, sem instalar nada.
 |---|---|---|---|
 | Virar | ← → ou A D | ◀ ▶ | analógico / direcional |
 | Acelerar | ↑ ou W | automático | A ou RT |
-| Frear | ↓ ou S | FREIO | B ou LT |
+| Frear / drift | ↓ ou S | FREIO | B ou LT |
 | Nitro | Espaço | NITRO | X, Y ou RB |
 | Câmera | C | Opções | LB |
 | Pausa | P ou Esc | ❚❚ | Start |
@@ -22,6 +22,11 @@ Roda no computador e no celular, sem instalar nada.
 - **Energia** cai com a distância e com batidas. Pegue os cristais verdes.
 - **Moedas** e prêmios viram créditos para a garagem: motor, turbina, pneus, nitro e blindagem.
 - Nas curvas o carro é jogado para fora. Quanto mais rápido, mais força. Pneus melhores ajudam.
+- **Drift:** segure o freio numa curva em alta velocidade. Um drift longo termina com turbo.
+- **Saltos:** nas cristas o carro tira as rodas do chão.
+- **Contra o relógio:** no Campeonato, troque para "Contra o relógio" e corra sozinho contra o fantasma da sua melhor volta.
+- **Celular:** em Opções, escolha virar pelos botões ou inclinando o aparelho como um volante.
+- Cada pista tem um túnel e, quando o relevo permite, uma ponte sobre um vale. Algumas têm chuva ou neve, que deixam a pista escorregadia.
 
 ## Os planetas
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { HALF, EDGE } from './track.js';
 import { createCar, radialTexture } from './models.js';
 import { playerStats, RIVALS, AI_COLORS, CAR_COLORS } from './data.js';
+import { writeSave } from './save.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const GEARS = [0, 0.16, 0.31, 0.47, 0.63, 0.8];
@@ -44,7 +45,7 @@ class Particles {
 }
 
 export class Race {
-  constructor({ world, index, save, audio, attract = false, quality = 'alta' }) {
+  constructor({ world, index, save, audio, attract = false, quality = 'alta', timeTrial = false }) {
     this.world = world; this.track = world.track; this.scene = world.scene;
     this.index = index; this.save = save; this.audio = audio; this.attract = attract;
     this.L = this.track.length;
@@ -61,11 +62,15 @@ export class Race {
     this.lastCountShown = 4;
     this.throttleHeld = 0;
     this.drainPerM = 100 / (2.3 * this.L);
+    this.tt = timeTrial && !attract;
+    this.lapTimes = [];
+    this.weather = world.weather;
+    const slip = this.weather === 'chuva' ? 1.12 : this.weather === 'neve' ? 1.18 : 1;
 
     const ps = playerStats(save.upgrades);
     const aiFactor = attract ? 0.95 : 0.87 + index * 0.017;
     this.cars = [];
-    const n = 12;
+    const n = this.tt ? 1 : 12;
     for (let g = 0; g < n; g++) {
       const isPlayer = !attract && g === n - 1;
       const color = isPlayer ? CAR_COLORS[save.color].hex : g === n - 1 ? CAR_COLORS[save.color].hex : AI_COLORS[g % AI_COLORS.length];
@@ -78,8 +83,8 @@ export class Race {
         dist: -8 - row * 9, x: col ? 3.4 : -3.4, v: 0, steer: 0, yawVis: 0, roll: 0, pitch: 0,
         vmax: isPlayer ? ps.vmax : 80 * aiFactor * skill,
         accel: isPlayer ? ps.accel : 14 + 3 * aiFactor,
-        cf: ps.cf, armor: ps.armor, nitro: isPlayer ? ps.nitro : 0, nitroMax: ps.nitro,
-        aLat: 48 * aiFactor, energy: 100, nitroT: 0, boostT: 0, padCool: 0, backfire: 0,
+        cf: ps.cf * slip, armor: ps.armor, nitro: isPlayer ? ps.nitro : 0, nitroMax: ps.nitro,
+        aLat: (48 * aiFactor) / slip, energy: 100, nitroT: 0, boostT: 0, padCool: 0, backfire: 0,
         finished: false, finishTime: 0, pos: g + 1, gear: 1, rpm: 0, lap: 0,
         lane: col ? 3.4 : -3.4, laneBase: col ? 3.4 : -3.4, laneT: 2 + Math.random() * 3,
         startDelay: attract ? 0 : 0.05 + Math.random() * 0.4, offroad: false, lastLapTime: 0,
@@ -89,9 +94,22 @@ export class Race {
     this.player = this.cars.find((c) => c.isPlayer) || null;
     this.focus = this.player || this.cars[0];
     this.lapStart = 0; this.bestLap = Infinity;
+    // contra o relógio: fantasma da melhor volta
+    this.rec = []; this.recT = 0; this.ttDelta = null;
+    if (this.tt) {
+      save.tt = save.tt || {};
+      const rec = save.tt[world.def.id];
+      this.ttBest = rec ? rec.best : null;
+      this.ghostData = rec && rec.g && rec.g.length >= 6 ? rec.g : null;
+      const gm = createCar(CAR_COLORS[save.color].hex, { ghost: true, quality });
+      gm.root.visible = false;
+      this.scene.add(gm.root);
+      this.ghostCar = { model: gm, dist: 0, x: 0, v: 0, steer: 0, yawVis: 0, roll: 0, pitch: 0, offroad: false, nitroT: 0, boostT: 0, backfire: 0, braking: false, i: -1 };
+    }
 
     const planet = world.planet;
     this.dust = new Particles(this.scene, 220, planet.dust, 1.4, false);
+    if (this.weather === 'chuva') this.spray = new Particles(this.scene, 260, '#b8c6da', 1.7, false);
     this.sparks = new Particles(this.scene, 120, new THREE.Color(3, 2, 0.8), 0.5, true);
     this.smoke = new Particles(this.scene, 160, '#e8e8ee', 2.2, false);
     this.speedFx = 0;
@@ -194,6 +212,15 @@ export class Race {
     this.shake = Math.max(0, this.shake - dt * 2.5);
     this.placeAll(dt);
     this.dust.update(dt); this.sparks.update(dt); this.smoke.update(dt);
+    if (this.spray) {
+      this.spray.update(dt);
+      for (const c of this.cars) {
+        if (c.v < 20 || (P && Math.abs(c.dist - P.dist) > 80) || Math.random() < 0.5) continue;
+        const sm = this.track.sample(c.dist - 2.4);
+        this.spray.emit(sm.x + sm.rx * (c.x + (Math.random() - 0.5) * 1.6), (c.yAbs ?? sm.y) + 0.25, sm.z + sm.rz * (c.x + (Math.random() - 0.5) * 1.6), (Math.random() - 0.5) * 2, 1.5 + Math.random(), (Math.random() - 0.5) * 2, 0.5);
+      }
+    }
+    if (this.tt && this.phase !== 'countdown') this.ghostStep(dt);
     if (P && racing && !this.done) {
       const boosting = P.nitroT > 0 || P.boostT > 0;
       this.audio.engine(P.air ? Math.min(1.08, P.rpm + 0.2) : P.rpm, P.throttle ? 1 : 0.2, P.v / 90, boosting, P.offroad ? Math.min(1, P.v / 40) : 0, P.drift ? 1 : 0);
@@ -466,6 +493,7 @@ export class Race {
         c.finished = true;
         c.finishTime = this.time - (c.dist - this.laps * L) / Math.max(c.v, 1);
         if (c === P) {
+          this.lapDone(c.finishTime - this.lapStart);
           this.phase = 'finish'; this.finishT = 3.2; P.aiDriven = true; P.laneBase = P.x;
           this.audio.sfx('finish');
           this.events.push({ type: 'finish', pos: P.pos });
@@ -473,12 +501,54 @@ export class Race {
       }
       if (c === P && done > c.lap && done < this.laps) {
         c.lap = done;
-        const lt = this.time - this.lapStart; this.lapStart = this.time;
-        this.bestLap = Math.min(this.bestLap, lt);
+        this.lapDone(this.time - this.lapStart);
+        this.lapStart = this.time;
         if (done === this.laps - 1) { this.events.push({ type: 'msg', text: 'VOLTA FINAL!', kind: 'final' }); this.audio.sfx('final'); }
         else { this.events.push({ type: 'msg', text: `VOLTA ${done + 1}`, kind: 'lap' }); this.audio.sfx('lap'); }
       }
     }
+  }
+
+  lapDone(lt) {
+    this.lapTimes.push(lt);
+    this.bestLap = Math.min(this.bestLap, lt);
+    if (!this.tt) return;
+    const id = this.world.def.id;
+    if (this.ttBest === null || lt < this.ttBest) {
+      const first = this.ttBest === null;
+      this.ttBest = lt;
+      this.save.tt[id] = { best: lt, g: this.rec };
+      writeSave(this.save);
+      this.ghostData = this.rec;
+      if (!first) this.events.push({ type: 'msg', text: 'RECORDE!', kind: 'good' });
+    }
+    this.rec = []; this.recT = 0; this.gi = 0;
+  }
+
+  // grava a volta atual e move o fantasma pela melhor volta
+  ghostStep(dt) {
+    const P = this.player, L = this.L;
+    if (!P || P.finished) { this.ghostCar.model.root.visible = false; return; }
+    const lapT = this.time - this.lapStart;
+    const inLap = P.dist - P.lap * L;
+    this.recT -= dt;
+    if (this.recT <= 0 && inLap >= 0) {
+      this.recT = 0.1;
+      this.rec.push(+lapT.toFixed(2), +inLap.toFixed(1), +P.x.toFixed(2));
+    }
+    const g = this.ghostData, gc = this.ghostCar;
+    if (!g || P.dist < 0) { gc.model.root.visible = false; this.ttDelta = null; return; }
+    const n = g.length / 3;
+    if (!this.gi || g[this.gi * 3] > lapT) this.gi = 0;
+    while (this.gi + 1 < n && g[(this.gi + 1) * 3] <= lapT) this.gi++;
+    if (this.gi + 1 >= n) { gc.model.root.visible = false; this.ttDelta = null; return; }
+    const i = this.gi, t0 = g[i * 3], t1 = g[i * 3 + 3], f = t1 > t0 ? (lapT - t0) / (t1 - t0) : 0;
+    const d = g[i * 3 + 1] + (g[i * 3 + 4] - g[i * 3 + 1]) * f;
+    gc.x = g[i * 3 + 2] + (g[i * 3 + 5] - g[i * 3 + 2]) * f;
+    gc.v = (g[i * 3 + 4] - g[i * 3 + 1]) / Math.max(0.05, t1 - t0);
+    gc.dist = P.lap * L + d;
+    gc.model.root.visible = true;
+    this.ttDelta = (d - inLap) / Math.max(P.v, 10);
   }
 
   buildResult() {
@@ -490,7 +560,7 @@ export class Race {
     }));
     rows.sort((a, b) => a.time - b.time);
     const pos = rows.findIndex((r) => r.isPlayer) + 1;
-    return { rows, pos, coins: this.coins, bestLap: this.bestLap };
+    return { rows, pos, coins: this.coins, bestLap: this.bestLap, tt: this.tt, lapTimes: this.lapTimes, ttBest: this.ttBest, total: this.player ? this.player.finishTime : this.time };
   }
 
   emitDust(c) {
@@ -504,7 +574,8 @@ export class Race {
   placeAll(dt) {
     const tr = this.track;
     const f = new THREE.Vector3(), r = new THREE.Vector3(), u = new THREE.Vector3(), xa = new THREE.Vector3(), m = new THREE.Matrix4();
-    for (const c of this.cars) {
+    const list = this.ghostCar && this.ghostCar.model.root.visible ? this.cars.concat([this.ghostCar]) : this.cars;
+    for (const c of list) {
       const sm = tr.sample(c.dist);
       f.set(sm.tx, sm.ty, sm.tz).normalize();
       r.set(sm.rx, 0, sm.rz);

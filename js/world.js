@@ -290,7 +290,7 @@ export function buildWorld(def, renderer, quality = 'alta') {
         if (track.inTunnelZone(s, 30) || track.bfAt(s) > 0) continue;
         track.sample(s, tmpS);
         for (const side of [-1, 1]) {
-          const off = EDGE + 6.5;
+          const off = EDGE + 8.5;
           const x = tmpS.x + tmpS.rx * off * side, z = tmpS.z + tmpS.rz * off * side;
           if (track.distToTrack(x, z) < EDGE + 3) continue;
           add(rowType, { x, y: track.terrainY(tmpS.y, off), z, yaw: rng() * 6, sc: 1.05, s });

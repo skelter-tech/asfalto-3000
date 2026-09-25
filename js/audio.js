@@ -34,6 +34,18 @@ export class AudioSys {
     if (this.pendingStyle !== undefined) this.music(this.pendingStyle);
   }
 
+  weather(kind) {
+    if (!this.ctx) return;
+    if (!this.rainLoop) {
+      const n = this.ctx.createBufferSource(); n.buffer = this.noise; n.loop = true;
+      const f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1400;
+      const f2 = this.ctx.createBiquadFilter(); f2.type = 'lowpass'; f2.frequency.value = 7000;
+      this.rainLoop = this.ctx.createGain(); this.rainLoop.gain.value = 0;
+      n.connect(f); f.connect(f2); f2.connect(this.rainLoop); this.rainLoop.connect(this.sfxBus); n.start();
+    }
+    this.rainLoop.gain.setTargetAtTime(kind === 'chuva' ? 0.16 : 0, this.ctx.currentTime, 0.4);
+  }
+
   setMusic(on) { this.musicOn = on; if (this.musicBus) this.musicBus.gain.setTargetAtTime(on ? 0.32 : 0, this.ctx.currentTime, 0.1); }
   setSfx(on) { this.sfxOn = on; if (this.sfxBus) this.sfxBus.gain.setTargetAtTime(on ? 0.8 : 0, this.ctx.currentTime, 0.05); }
 
