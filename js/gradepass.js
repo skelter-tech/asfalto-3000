@@ -15,11 +15,11 @@ export class GradePass extends Pass {
         void main(){
           vec3 c = texture2D(tDiffuse, vUv).rgb;
           float lum = dot(c, vec3(0.299, 0.587, 0.114));
-          c = mix(vec3(lum), c, 1.22);
-          c = (c - 0.5) * 1.1 + 0.5;
+          c = mix(vec3(lum), c, 1.12);
+          c = (c - 0.5) * 1.05 + 0.5;
           vec2 d = vUv - 0.5;
           float vig = smoothstep(0.95, 0.35, dot(d, d) * 2.1);
-          c *= mix(0.8, 1.0, vig);
+          c *= mix(0.88, 1.0, vig);
           gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
         }`,
     });

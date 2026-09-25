@@ -24,6 +24,7 @@ function skyMaterial(def, sunDir) {
       void main(){
         vec3 d = normalize(vDir); float h = d.y;
         vec3 c = h > 0.0 ? mix(horizon, top, pow(clamp(h,0.0,1.0), 0.5)) : mix(horizon, bottom, clamp(-h*8.0,0.0,1.0));
+        c = mix(c, horizon * 1.07, exp(-abs(h) * 22.0) * 0.45);
         if (hasSun > 0.5) {
           float ca = dot(d, sunDir);
           c += sunColor * sunGlow * (pow(max(ca,0.0), 8.0) * 0.35 + pow(max(ca,0.0), 90.0) * 0.6);
@@ -80,7 +81,8 @@ function canvasTex(w, h, draw) {
 
 function yawTo(dx, dz) { return Math.atan2(dx, dz); } // local +z -> (dx,dz)
 
-export function buildWorld(def) {
+export function buildWorld(def, renderer, quality = 'alta') {
+  const lite = quality !== 'alta';
   const planet = PLANETS[def.planet];
   const rng = mulberry32(def.seed * 7919 + 13);
   const track = new Track(def, rng);
@@ -90,7 +92,8 @@ export function buildWorld(def) {
   scene.background = C(def.fog);
 
   // luz
-  scene.add(new THREE.HemisphereLight(def.hemi[0], def.hemi[1], def.hemi[2]));
+  const hemi = new THREE.HemisphereLight(def.hemi[0], def.hemi[1], def.hemi[2]);
+  scene.add(hemi);
   const s0 = track.sample(0, {});
   const startYaw = Math.atan2(s0.tx, s0.tz);
   const sun = def.sun || { az: 0.6, el: 0.5 };
@@ -135,6 +138,20 @@ export function buildWorld(def) {
   }
   scene.add(skyGroup);
 
+  // reflexo do céu na pintura dos carros
+  let envRT = null;
+  if (renderer) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = new THREE.Scene();
+    envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMat));
+    const eg = new THREE.Mesh(new THREE.CircleGeometry(60, 24), new THREE.MeshBasicMaterial({ color: C(planet.groundFar).lerp(C(def.fog), 0.35) }));
+    eg.rotation.x = -Math.PI / 2; eg.position.y = -3; envScene.add(eg);
+    envRT = pmrem.fromScene(envScene, 0.03, 0.1, 200);
+    scene.environment = envRT.texture;
+    scene.environmentIntensity = night ? 1.8 : 1.0;
+    pmrem.dispose();
+  }
+
   // pista
   scene.add(track.buildMeshes(planet, def));
 
@@ -175,24 +192,34 @@ export function buildWorld(def) {
     scene.add(mesh);
   }
 
-  // nuvens
+  // nuvens em camadas, com base achatada e sombra embaixo
   if (def.clouds) {
-    const parts = [];
-    for (let i = 0; i < 5; i++) {
-      const g = new THREE.IcosahedronGeometry(1, 0); g.scale(1.3, 0.6, 1); g.translate((i - 2) * 1.1, Math.abs(i - 2) * -0.15, (i % 2) * 0.4);
-      parts.push(prep(g, def.clouds));
-    }
-    const cg = mergeGeometries(parts);
-    const cm = new THREE.InstancedMesh(cg, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, transparent: true, opacity: 0.92 }), 26);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
-    for (let i = 0; i < 26; i++) {
-      const a = rng() * Math.PI * 2, rad = R * 1.8 + rng() * R * 2;
-      p.set(Math.sin(a) * rad, 160 + rng() * 200, Math.cos(a) * rad);
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng() * 6);
-      const s = 30 + rng() * 45; sc.set(s, s * 0.8, s);
-      cm.setMatrixAt(i, m4.compose(p, q, sc));
-    }
-    scene.add(cm);
+    const shade = '#' + C(def.clouds).lerp(C(def.sky.top), 0.5).getHexString();
+    const texs = [0, 1, 2].map((k) => canvasTex(256, 128, (c) => {
+      const r = mulberry32(def.seed + k * 31);
+      c.fillStyle = '#fff';
+      for (let i = 0; i < 11; i++) {
+        const x = 34 + r() * 188, rad = 16 + r() * 30 * (1 - Math.abs(x - 128) / 190);
+        c.beginPath(); c.arc(x, 92 - rad * 0.55 - r() * 16, rad, 0, 7); c.fill();
+      }
+      c.beginPath(); c.ellipse(128, 90, 104, 16, 0, 0, 7); c.fill();
+      c.clearRect(0, 98, 256, 30);
+      c.globalCompositeOperation = 'source-atop';
+      const g = c.createLinearGradient(0, 30, 0, 98);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, shade);
+      c.fillStyle = g; c.fillRect(0, 0, 256, 128);
+    }));
+    const layers = [[R * 4.4, 170, 280, 22, 420, 620], [R * 2.5, 150, 260, 16, 220, 340], [R * 1.8, 280, 420, 10, 150, 240]];
+    layers.forEach(([rad, y0, y1, n, w0, w1], li) => {
+      for (let i = 0; i < (lite ? n >> 1 : n); i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texs[(i + li) % 3], color: def.clouds, fog: false, transparent: true, depthWrite: false, opacity: night ? 0.55 : 0.95 }));
+        const a = rng() * Math.PI * 2, rr = rad * (0.9 + rng() * 0.2), w = w0 + rng() * (w1 - w0);
+        sp.position.set(Math.sin(a) * rr, track.groundY + y0 + rng() * (y1 - y0), Math.cos(a) * rr);
+        sp.scale.set(w, w * 0.5, 1);
+        sp.renderOrder = -4;
+        scene.add(sp);
+      }
+    });
   }
 
   // aurora
@@ -240,18 +267,36 @@ export function buildWorld(def) {
   const wsum = weights.reduce((s, w) => s + w[1], 0);
   const pick = () => { let r = rng() * wsum; for (const [t, w] of weights) { r -= w; if (r <= 0) return t; } return weights[0][0]; };
   const isCity = planet.cityRing;
-  const count = Math.floor(L / (isCity ? 11 : 6.5));
+  const count = Math.floor(L / (isCity ? (lite ? 16 : 11) : lite ? 8 : 4.2));
   for (let n = 0; n < count; n++) {
     const s = rng() * L;
     const side = rng() < 0.5 ? -1 : 1;
     const type = pick();
     const big = type === 'building' || type === 'mesa' || type === 'dome';
     const off = EDGE + (big ? 22 + rng() * 70 : 4 + Math.pow(rng(), 1.7) * 60);
+    if (track.inTunnelZone(s, 30) && off < 52) continue;
     track.sample(s, tmpS);
     const x = tmpS.x + tmpS.rx * off * side, z = tmpS.z + tmpS.rz * off * side;
     const clear = big ? EDGE + 18 : EDGE + 3;
     if (track.distToTrack(x, z) < clear) continue;
-    add(type, { x, y: track.terrainY(tmpS.y, off), z, yaw: rng() * Math.PI * 2, sc: 0.75 + rng() * 0.6, s });
+    add(type, { x, y: track.terrainY(tmpS.y, off, track.bfAt(s)), z, yaw: rng() * Math.PI * 2, sc: 0.75 + rng() * 0.6, s });
+  }
+  // fileiras ritmadas ao lado da pista (a assinatura do gênero)
+  if (!isCity) {
+    const rowType = weights[0][0];
+    for (let r = 0; r < (lite ? 3 : 6); r++) {
+      const s0 = 150 + rng() * (L - 450);
+      for (let s = s0; s < s0 + 260; s += 15) {
+        if (track.inTunnelZone(s, 30) || track.bfAt(s) > 0) continue;
+        track.sample(s, tmpS);
+        for (const side of [-1, 1]) {
+          const off = EDGE + 6.5;
+          const x = tmpS.x + tmpS.rx * off * side, z = tmpS.z + tmpS.rz * off * side;
+          if (track.distToTrack(x, z) < EDGE + 3) continue;
+          add(rowType, { x, y: track.terrainY(tmpS.y, off), z, yaw: rng() * 6, sc: 1.05, s });
+        }
+      }
+    }
   }
 
   const vcMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
@@ -300,7 +345,7 @@ export function buildWorld(def) {
   const signs = [];
   for (let s = 0; s < L; s += 26) {
     const k = track.curvAt(s);
-    if (Math.abs(k) < 1 / 170) continue;
+    if (Math.abs(k) < 1 / 170 || track.tfAt(s) || track.bfAt(s) > 0) continue;
     track.sample(s, tmpS);
     const side = k > 0 ? -1 : 1; // lado de fora da curva
     const off = EDGE + 2.2;
@@ -329,6 +374,7 @@ export function buildWorld(def) {
     const headG = new THREE.BoxGeometry(0.9, 0.16, 0.5); headG.translate(2.2, 7.4, 0);
     const lamps = [];
     for (let s = 20, k = 0; s < L; s += 42, k++) {
+      if (track.tfAt(s)) continue;
       const side = k % 2 ? 1 : -1;
       track.sample(s, tmpS);
       const off = EDGE + 1.6;
@@ -391,6 +437,75 @@ export function buildWorld(def) {
     });
   }
 
+  // guard-rails do lado de fora das curvas
+  {
+    const parts = [];
+    const seg = track.ds * 2;
+    const rail = new THREE.BoxGeometry(0.16, 0.34, seg + 0.05); rail.translate(0, 0.72, seg / 2);
+    const post = new THREE.BoxGeometry(0.14, 0.8, 0.14); post.translate(0, 0.4, 0);
+    for (let i = 0; i < track.N; i += 2) {
+      const s = i * track.ds, k = track.k[i];
+      if (Math.abs(k) < 1 / 230 || track.tf[i] || track.bf[i] > 0) continue;
+      const side = k > 0 ? -1 : 1, x = side * (EDGE + 0.9);
+      const m = new THREE.Matrix4().makeRotationY(Math.atan2(track.tx[i], track.tz[i]));
+      m.setPosition(track.px[i] + track.rx[i] * x, track.py[i], track.pz[i] + track.rz[i] * x);
+      parts.push(rail.clone().applyMatrix4(m).toNonIndexed());
+      if (i % 4 === 0) parts.push(post.clone().applyMatrix4(m).toNonIndexed());
+    }
+    if (parts.length) scene.add(new THREE.Mesh(mergeGeometries(parts, false), new THREE.MeshLambertMaterial({ color: '#dfe3ea', flatShading: true })));
+  }
+
+  // clima: chuva (riscos) ou neve (flocos) numa caixa que acompanha a câmera
+  let weather = null;
+  if (def.weather) {
+    const snow = def.weather === 'neve';
+    const n = lite ? (snow ? 900 : 1200) : (snow ? 1800 : 2600);
+    const BX = 70, BY = 40, BZ = 70;
+    const pts = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { pts[i * 3] = (rng() - 0.5) * BX; pts[i * 3 + 1] = rng() * BY; pts[i * 3 + 2] = (rng() - 0.5) * BZ; }
+    const group = new THREE.Group();
+    let obj, pos;
+    if (snow) {
+      const g = new THREE.BufferGeometry(); pos = pts;
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      obj = new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffffff', size: 0.35, map: canvasTex(32, 32, (c) => { const gr = c.createRadialGradient(16, 16, 1, 16, 16, 16); gr.addColorStop(0, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(0, 0, 32, 32); }), transparent: true, depthWrite: false, fog: false }));
+    } else {
+      pos = new Float32Array(n * 6);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      obj = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: night ? '#9fb4e6' : '#c9d6ea', transparent: true, opacity: 0.45, depthWrite: false, fog: false }));
+    }
+    obj.frustumCulled = false;
+    group.add(obj);
+    scene.add(group);
+    scene.fog.far *= 0.72;
+    const last = new THREE.Vector3();
+    weather = {
+      snow,
+      update(dt, cam) {
+        const dx = cam.position.x - last.x, dy = cam.position.y - last.y, dz = cam.position.z - last.z;
+        last.copy(cam.position);
+        group.position.copy(cam.position); group.position.y -= BY * 0.5;
+        const fall = snow ? 4 : 38;
+        const jump = Math.abs(dx) + Math.abs(dz) > 40;
+        for (let i = 0; i < n; i++) {
+          let x = pts[i * 3] - (jump ? 0 : dx), y = pts[i * 3 + 1] - fall * dt - (jump ? 0 : dy), z = pts[i * 3 + 2] - (jump ? 0 : dz);
+          if (snow) { x += Math.sin(y * 0.4 + i) * dt * 0.8; }
+          if (y < 0) y += BY; else if (y > BY) y -= BY;
+          if (x < -BX / 2) x += BX; else if (x > BX / 2) x -= BX;
+          if (z < -BZ / 2) z += BZ; else if (z > BZ / 2) z -= BZ;
+          pts[i * 3] = x; pts[i * 3 + 1] = y; pts[i * 3 + 2] = z;
+          if (!snow) {
+            const o = i * 6;
+            pos[o] = x; pos[o + 1] = y; pos[o + 2] = z;
+            pos[o + 3] = x + dx * 0.35; pos[o + 4] = y + 0.9; pos[o + 5] = z + dz * 0.35;
+          }
+        }
+        obj.geometry.attributes.position.needsUpdate = true;
+      },
+    };
+  }
+
   // pórtico de largada
   {
     const tex = canvasTex(1024, 128, (c, w, h) => {
@@ -413,14 +528,24 @@ export function buildWorld(def) {
     scene.add(g);
   }
 
+  const hemiI = hemi.intensity, dirI = dl.intensity;
+  let dark = 0, lastT = 0;
   return {
-    scene, track, def, planet, night,
-    update(t, camera) {
+    scene, track, def, planet, night, weather: def.weather || null,
+    update(t, camera, focusS) {
+      const dt = Math.min(0.05, Math.max(0, t - lastT)); lastT = t;
       skyGroup.position.copy(camera.position);
       skyMat.uniforms.time.value = t;
       if (auroraMat) auroraMat.uniforms.time.value = t;
+      // escurece dentro do túnel
+      const inside = focusS !== undefined && track.inTunnelZone(focusS, -6) ? 1 : 0;
+      dark += (inside - dark) * Math.min(1, dt * 4);
+      hemi.intensity = hemiI * (1 - 0.55 * dark);
+      dl.intensity = dirI * (1 - 0.85 * dark);
+      if (weather) weather.update(dt, camera);
     },
     dispose() {
+      if (envRT) envRT.dispose();
       scene.traverse((o) => {
         if (o.geometry && !o.userData.shared) o.geometry.dispose();
         const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];

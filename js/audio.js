@@ -112,6 +112,7 @@ export class AudioSys {
       case 'finish': [0, 4, 7, 12, 16, 19, 24].forEach((n, i) => this.tone('square', mtof(64 + n), mtof(64 + n), 0.22, 0.14, i * 0.08)); break;
       case 'ui': this.tone('square', 880, 880, 0.04, 0.08); break;
       case 'buy': [0, 7, 12, 19].forEach((n, i) => this.tone('triangle', mtof(76 + n), mtof(76 + n), 0.14, 0.22, i * 0.06)); break;
+      case 'scrape': this.noiseHit(0.22, 0.35, 'bandpass', 3200, 1800, 0, this.sfxBus, 4); break;
       case 'deny': this.tone('square', 180, 120, 0.2, 0.15); break;
       default: break;
     }

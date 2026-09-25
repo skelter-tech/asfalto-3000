@@ -72,12 +72,23 @@ const showroom = (() => {
   ring.rotation.x = Math.PI / 2; ring.position.y = 0.01; scene.add(ring);
   const grid = new THREE.GridHelper(80, 40, '#ff3d8b', '#3a2a6a'); grid.position.y = -0.26; scene.add(grid);
   const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  {
+    const pm = new THREE.PMREMGenerator(renderer);
+    const studio = new THREE.Scene();
+    studio.add(new THREE.Mesh(new THREE.SphereGeometry(20, 16, 8), new THREE.MeshBasicMaterial({ color: '#241a4e', side: THREE.BackSide })));
+    for (const [x, y, z, c] of [[0, 12, 0, [3, 3, 3]], [12, 4, 6, [0.4, 2.2, 2.8]], [-12, 5, -4, [2.6, 0.6, 1.8]]]) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(10, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(...c), side: THREE.DoubleSide }));
+      p.position.set(x, y, z); p.lookAt(0, 0, 0); studio.add(p);
+    }
+    scene.environment = pm.fromScene(studio, 0.04).texture;
+    pm.dispose();
+  }
   let car = null, ang = 0.6;
   return {
     scene, cam,
     setColor(hex) {
       if (car) scene.remove(car.root);
-      car = createCar(hex, { player: true, night: false });
+      car = createCar(hex, { player: true, night: false, quality: 'alta' });
       scene.add(car.root);
     },
     update(dt) {
@@ -112,8 +123,8 @@ function show(id) {
 function loadWorld(index, attract) {
   if (race) { race.dispose(); race = null; }
   if (world) { world.dispose(); world = null; }
-  world = buildWorld(RACES[index]);
-  race = new Race({ world, index, save, audio, attract });
+  world = buildWorld(RACES[index], renderer, save.opts.quality);
+  race = new Race({ world, index, save, audio, attract, quality: save.opts.quality });
   if (!attract) drawMinimapBase();
 }
 
@@ -432,7 +443,7 @@ function frame(now) {
       }
     }
     race.updateCamera(camera, dt, save.opts, camera.aspect);
-    world.update(time, camera);
+    world.update(time, camera, race.focus.dist);
     render(world.scene, camera);
   }
   input.endFrame();

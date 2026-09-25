@@ -44,7 +44,7 @@ class Particles {
 }
 
 export class Race {
-  constructor({ world, index, save, audio, attract = false }) {
+  constructor({ world, index, save, audio, attract = false, quality = 'alta' }) {
     this.world = world; this.track = world.track; this.scene = world.scene;
     this.index = index; this.save = save; this.audio = audio; this.attract = attract;
     this.L = this.track.length;
@@ -69,8 +69,7 @@ export class Race {
     for (let g = 0; g < n; g++) {
       const isPlayer = !attract && g === n - 1;
       const color = isPlayer ? CAR_COLORS[save.color].hex : g === n - 1 ? CAR_COLORS[save.color].hex : AI_COLORS[g % AI_COLORS.length];
-      const model = createCar(color, { player: isPlayer, night: world.night && isPlayer });
-      if (world.night) model.paint.emissive = new THREE.Color(color).multiplyScalar(0.14);
+      const model = createCar(color, { player: isPlayer, night: world.night, quality });
       this.scene.add(model.root);
       const row = Math.floor(g / 2), col = g % 2;
       const skill = 1.0 - g * 0.006 - Math.random() * 0.03;
@@ -250,8 +249,19 @@ export class Race {
       const lat = 12.5 * Math.min(1, c.v / 26);
       c.x += c.steer * lat * dt;
       c.x -= k * c.v * c.v * c.cf * dt;
-      const lim = EDGE + 9;
-      if (Math.abs(c.x) > lim) { c.x = Math.sign(c.x) * lim; c.v *= 1 - 1.5 * dt; }
+      const walled = tr.tfAt(s) || tr.bfAt(s) > 0.05;
+      const lim = walled ? EDGE - 0.35 : EDGE + 9;
+      if (Math.abs(c.x) > lim) {
+        c.x = Math.sign(c.x) * lim;
+        c.v *= 1 - (walled ? 2.4 : 1.5) * dt;
+        if (walled && c.v > 12) {
+          this.shake = Math.max(this.shake, 0.35);
+          if ((this.scrapeCool || 0) <= this.time) { this.scrapeCool = this.time + 0.25; this.audio.sfx('scrape'); this.events.push({ type: 'hit' }); }
+          const sm = tr.sample(s + 1, {});
+          const px = sm.x + sm.rx * c.x, pz = sm.z + sm.rz * c.x;
+          for (let i = 0; i < 3; i++) this.sparks.emit(px, sm.y + 0.5, pz, (Math.random() - 0.5) * 6, 2 + Math.random() * 3, (Math.random() - 0.5) * 6, 0.35);
+        }
+      }
       c.energy = Math.max(0, c.energy - c.v * dt * this.drainPerM);
       if (c.energy <= 0 && !this.warnedEnergy) { this.warnedEnergy = true; this.events.push({ type: 'msg', text: 'SEM ENERGIA!', kind: 'bad' }); }
       if (c.offroad && c.v > 8) {
@@ -450,7 +460,7 @@ export class Race {
       xa.crossVectors(u, fx).normalize();
       m.makeBasis(xa, u, fx);
       const ax = Math.abs(c.x);
-      const y = ax > EDGE ? tr.terrainY(sm.y, ax) : sm.y;
+      const y = ax > EDGE ? tr.terrainY(sm.y, ax, tr.bfAt(c.dist)) : sm.y;
       const root = c.model.root;
       root.position.set(sm.x + sm.rx * c.x, y, sm.z + sm.rz * c.x);
       root.quaternion.setFromRotationMatrix(m);

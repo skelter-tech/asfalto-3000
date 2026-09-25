@@ -6,7 +6,7 @@ export const PLANETS = [
     tagline: 'Litoral ensolarado, palmeiras e uma metrópole no horizonte.',
     road: ['#5d616e', '#585c69'], line: '#f2f2f2', kerb: ['#e8323c', '#f4f4f4'],
     ground: ['#67bd4e', '#5db345'], groundFar: '#4f9a3e', mount: '#4d74b0', snow: true,
-    scenery: [['palm', 5], ['roundTree', 3], ['bush', 3]],
+    scenery: [['palm', 5], ['roundTree', 3], ['bush', 2], ['flowers', 3]],
     skyline: true, billboards: true, music: 0, dust: '#d8c9a0', chip: 'linear-gradient(135deg,#2b74e0,#bfe4ff 60%,#67bd4e)',
   },
   {
@@ -42,7 +42,7 @@ export const RACES = [
   {
     id: 't1', planet: 0, name: 'Costa Dourada', time: 'Manhã', seed: 11, R: 480, wiggle: 0.30, hills: 12, laps: 3,
     sky: { top: '#2b74e0', horizon: '#c4e6ff', bottom: '#a7d4f5' }, fog: '#cfe9ff', fogNear: 140, fogFar: 1150,
-    sun: { az: 0.5, el: 0.55, color: '#fff3cf', size: 0.035, glow: 0.35 },
+    sun: { az: 0.35, el: 0.2, color: '#fff3cf', size: 0.06, glow: 0.6 },
     hemi: ['#e3f3ff', '#6d8f4a', 1.7], dir: ['#fff1d6', 2.6], clouds: '#ffffff',
   },
   {
@@ -55,20 +55,20 @@ export const RACES = [
     id: 't3', planet: 0, name: 'Avenida Lunar', time: 'Noite', seed: 37, R: 560, wiggle: 0.36, hills: 18, laps: 3,
     sky: { top: '#050a22', horizon: '#27407a', bottom: '#1a2a55' }, fog: '#1d2d5c', fogNear: 90, fogFar: 850,
     moons: [{ az: 0.7, el: 0.32, size: 90, color: '#f3f0ff' }], stars: true, night: true, lamps: true,
-    hemi: ['#7d96d9', '#252a44', 1.25], dir: ['#a9bcff', 1.0],
+    hemi: ['#7d96d9', '#252a44', 1.25], dir: ['#a9bcff', 1.0], clouds: '#3a4a86', weather: 'chuva',
   },
   // ---------- Duna Vermelha ----------
   {
     id: 'm1', planet: 1, name: 'Cânion Olympus', time: 'Tarde', seed: 51, R: 520, wiggle: 0.36, hills: 20, laps: 3,
     sky: { top: '#b8744a', horizon: '#f2c89c', bottom: '#e6b58a' }, fog: '#eab98c', fogNear: 120, fogFar: 1000,
-    sun: { az: -0.6, el: 0.45, color: '#fff6e8', size: 0.025, glow: 0.3 },
-    hemi: ['#ffdcbc', '#8a4a2a', 1.6], dir: ['#fff0dc', 2.5],
+    sun: { az: -0.3, el: 0.26, color: '#fff6e8', size: 0.045, glow: 0.55 },
+    hemi: ['#ffdcbc', '#8a4a2a', 1.6], dir: ['#fff0dc', 2.5], clouds: '#fbe3cc',
   },
   {
     id: 'm2', planet: 1, name: 'Poente Azul', time: 'Pôr do sol marciano', seed: 67, R: 560, wiggle: 0.40, hills: 22, laps: 3,
     sky: { top: '#1b2552', horizon: '#93b8e2', bottom: '#6e8fc0' }, fog: '#7092c0', fogNear: 110, fogFar: 950,
     sun: { az: 0.2, el: 0.06, color: '#eaf4ff', size: 0.035, glow: 1.1 },
-    hemi: ['#a9c1ec', '#5a3a33', 1.45], dir: ['#cfe0ff', 1.8],
+    hemi: ['#a9c1ec', '#5a3a33', 1.45], dir: ['#cfe0ff', 1.8], clouds: '#c9d6f0',
   },
   {
     id: 'm3', planet: 1, name: 'Noite das Duas Luas', time: 'Noite', seed: 79, R: 600, wiggle: 0.42, hills: 24, laps: 3,
@@ -81,8 +81,8 @@ export const RACES = [
   {
     id: 'c1', planet: 2, name: 'Geleira Clara', time: 'Dia', seed: 97, R: 540, wiggle: 0.38, hills: 18, laps: 3,
     sky: { top: '#3f95e0', horizon: '#e8f7ff', bottom: '#d4ecfa' }, fog: '#e3f2fb', fogNear: 140, fogFar: 1100,
-    sun: { az: 0.9, el: 0.5, color: '#ffffff', size: 0.03, glow: 0.4 },
-    hemi: ['#eef8ff', '#8aa0bf', 1.35], dir: ['#ffffff', 2.0], clouds: '#ffffff',
+    sun: { az: 0.5, el: 0.24, color: '#ffffff', size: 0.05, glow: 0.55 },
+    hemi: ['#eef8ff', '#8aa0bf', 1.35], dir: ['#ffffff', 2.0], clouds: '#ffffff', weather: 'neve',
   },
   {
     id: 'c2', planet: 2, name: 'Aurora', time: 'Noite polar', seed: 113, R: 580, wiggle: 0.42, hills: 20, laps: 3,
@@ -94,19 +94,19 @@ export const RACES = [
     id: 'c3', planet: 2, name: 'Alvorada de Gelo', time: 'Amanhecer', seed: 131, R: 620, wiggle: 0.44, hills: 22, laps: 3,
     sky: { top: '#6a78d0', horizon: '#ffc4d8', bottom: '#f2c7d8' }, fog: '#f2c9da', fogNear: 120, fogFar: 1000,
     sun: { az: -0.2, el: 0.07, color: '#fff2f6', size: 0.05, glow: 0.9 },
-    hemi: ['#ffdbe8', '#7d86b8', 1.35], dir: ['#ffd0dc', 2.0], clouds: '#ffd6e4',
+    hemi: ['#ffdbe8', '#7d86b8', 1.35], dir: ['#ffd0dc', 2.0], clouds: '#ffd6e4', weather: 'neve',
   },
   // ---------- Neo Tóquio 3000 ----------
   {
     id: 'n1', planet: 3, name: 'Anel de Néon', time: 'Crepúsculo', seed: 151, R: 560, wiggle: 0.40, hills: 16, laps: 3,
     sky: { top: '#1a0f40', horizon: '#ff4f8b', bottom: '#a02a6a' }, fog: '#6d2a70', fogNear: 110, fogFar: 950,
     sun: { az: 0, el: 0.04, color: '#ffb36b', size: 0.11, glow: 1.0, stripes: true }, night: true,
-    hemi: ['#d08ae0', '#2a1d4d', 1.4], dir: ['#ff9a8a', 1.5],
+    hemi: ['#d08ae0', '#2a1d4d', 1.4], dir: ['#ff9a8a', 1.5], clouds: '#ffa8c8',
   },
   {
     id: 'n2', planet: 3, name: 'Distrito 3000', time: 'Noite', seed: 173, R: 600, wiggle: 0.44, hills: 20, laps: 3,
     sky: { top: '#04030e', horizon: '#3e1b70', bottom: '#241244' }, fog: '#1f1239', fogNear: 90, fogFar: 850,
-    stars: true, night: true, moons: [{ az: -0.8, el: 0.4, size: 70, color: '#ffd9f4' }],
+    stars: true, night: true, moons: [{ az: -0.8, el: 0.4, size: 70, color: '#ffd9f4' }], weather: 'chuva',
     hemi: ['#8a7ae6', '#1a1433', 1.3], dir: ['#b7a8ff', 0.9],
   },
   {
