@@ -209,7 +209,10 @@ button { font: inherit; color: inherit; }
 .t-right { position: absolute; right: calc(14px + var(--safe-r)); bottom: calc(16px + var(--safe-b)); display: flex; gap: 12px; align-items: flex-end; }
 .t-right button { width: 80px; height: 80px; border-radius: 50%; font-size: 13px; }
 #touch .t-nitro { width: 100px; height: 100px; background: linear-gradient(135deg, rgba(41,211,255,0.7), rgba(31,139,255,0.7)); font-size: 15px; }
-#touch .t-accel { background: rgba(62,224,122,0.4); }
+#touch .t-accel { width: 92px; height: 132px; border-radius: 18px 18px 26px 26px; background: linear-gradient(180deg, rgba(62,224,122,0.55), rgba(20,120,70,0.6)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; transform: perspective(300px) rotateX(12deg); transition: transform 0.08s; }
+#touch .t-accel i { display: block; width: 58%; height: 6px; border-radius: 3px; background: rgba(0,0,0,0.35); }
+#touch .t-accel span { font-size: 11px; letter-spacing: 0.1em; margin-top: 4px; }
+#touch .t-accel.on { transform: perspective(300px) rotateX(28deg) translateY(6px); background: linear-gradient(180deg, rgba(90,255,150,0.8), rgba(30,160,90,0.8)); }
 #touch .t-brake { background: rgba(255,71,87,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 #touch .t-brake small { font-size: 10px; letter-spacing: 0.12em; opacity: 0.85; text-transform: uppercase; }
 
@@ -251,6 +254,7 @@ button { font: inherit; color: inherit; }
   .t-left button { width: 88px; height: 88px; }
   .t-right button { width: 66px; height: 66px; }
   #touch .t-nitro { width: 84px; height: 84px; }
+  #touch .t-accel { width: 80px; height: 112px; }
   .screen.garage { background: linear-gradient(90deg, transparent 38%, rgba(8,6,22,0.82) 55%); }
   .screen.garage .garage-panel { margin-top: 0; max-height: none; width: min(420px, 58%); }
   .menu { gap: 8px; }

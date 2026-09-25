@@ -8,7 +8,7 @@ function defaults() {
     upgrades: { eng: 0, acc: 0, grip: 0, nitro: 0, armor: 0 },
     color: 0,
     best: {},
-    opts: { quality: IS_TOUCH ? 'leve' : 'alta', autoAccel: IS_TOUCH, music: true, sfx: true, cam: 0, steer: 'botoes', tiltInvert: false },
+    opts: { quality: IS_TOUCH ? 'leve' : 'alta', autoAccel: false, music: true, sfx: true, cam: 0, steer: 'botoes', tiltInvert: false },
   };
 }
 
@@ -20,7 +20,8 @@ export function loadSave() {
       return {
         ...d, ...s,
         upgrades: { ...d.upgrades, ...(s.upgrades || {}) },
-        opts: { ...d.opts, ...(s.opts || {}) },
+        opts: { ...d.opts, ...(s.opts || {}), ...(s.pedal ? {} : { autoAccel: false }) },
+        pedal: true,
         best: { ...(s.best || {}) },
       };
     }
