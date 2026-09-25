@@ -1,10 +1,32 @@
 // Todo o som é sintetizado com Web Audio: motor, efeitos e trilha synthwave.
 
+// Trilhas synthwave, uma por planeta. Melodias em graus da escala menor: [passo, grau, duração] em 32 passos (2 compassos).
+const SCALE = [0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19];
 const STYLES = [
-  { bpm: 124, key: 45, prog: [[0, 'm'], [-4, 'M'], [3, 'M'], [-2, 'M']] },   // Terra Nova: Lá menor
-  { bpm: 116, key: 38, prog: [[0, 'm'], [-4, 'M'], [5, 'm'], [7, 'M']] },    // Duna Vermelha: Ré menor
-  { bpm: 108, key: 40, prog: [[0, 'm'], [-4, 'M'], [3, 'M'], [-2, 'M']] },   // Cristalis: Mi menor
-  { bpm: 132, key: 42, prog: [[0, 'm'], [-4, 'M'], [-2, 'M'], [3, 'M']] },   // Neo Tóquio: Fá# menor
+  { // Terra Nova — Lá menor, ensolarada
+    bpm: 124, key: 45, lead: 'sawtooth',
+    prog: [[0, 'm'], [-4, 'M'], [3, 'M'], [-2, 'M'], [0, 'm'], [-4, 'M'], [-2, 'M'], [-5, 'M']],
+    A: [[0, 4, 3], [3, 5, 1], [4, 4, 2], [6, 2, 2], [8, 0, 4], [12, 2, 2], [14, 4, 2], [16, 5, 4], [20, 4, 2], [22, 5, 2], [24, 6, 6], [30, 5, 2]],
+    B: [[0, 7, 4], [4, 6, 2], [6, 5, 2], [8, 4, 4], [12, 5, 2], [14, 6, 2], [16, 7, 3], [19, 8, 1], [20, 7, 4], [24, 5, 4], [28, 4, 4]],
+  },
+  { // Duna Vermelha — Ré menor, pesada
+    bpm: 112, key: 38, lead: 'square',
+    prog: [[0, 'm'], [0, 'm'], [-4, 'M'], [-2, 'M'], [5, 'm'], [5, 'm'], [3, 'M'], [7, 'M']],
+    A: [[0, 0, 2], [2, 2, 2], [4, 3, 4], [10, 2, 2], [12, 0, 4], [16, 4, 6], [22, 3, 2], [24, 2, 4], [28, 1, 4]],
+    B: [[0, 4, 2], [2, 5, 2], [4, 7, 6], [12, 6, 4], [16, 5, 2], [18, 4, 2], [20, 5, 4], [24, 4, 8]],
+  },
+  { // Cristalis — Mi menor, etérea
+    bpm: 104, key: 40, lead: 'triangle',
+    prog: [[0, 'm'], [-4, 'M'], [3, 'M'], [-2, 'M'], [5, 'm'], [0, 'm'], [-4, 'M'], [-2, 'M']],
+    A: [[0, 7, 6], [6, 6, 2], [8, 4, 8], [16, 5, 4], [20, 4, 2], [22, 2, 2], [24, 4, 8]],
+    B: [[0, 9, 4], [4, 8, 4], [8, 7, 8], [16, 8, 2], [18, 7, 2], [20, 6, 4], [24, 7, 8]],
+  },
+  { // Neo Tóquio 3000 — Fá# menor, rápida
+    bpm: 132, key: 42, lead: 'sawtooth',
+    prog: [[0, 'm'], [-4, 'M'], [-2, 'M'], [3, 'M'], [0, 'm'], [-4, 'M'], [-2, 'M'], [-2, 'M']],
+    A: [[0, 4, 1], [1, 4, 1], [2, 5, 2], [4, 4, 2], [6, 2, 2], [8, 3, 2], [10, 2, 2], [12, 0, 4], [16, 4, 1], [17, 4, 1], [18, 5, 2], [20, 6, 2], [22, 7, 4], [26, 6, 2], [28, 5, 4]],
+    B: [[0, 7, 2], [2, 9, 2], [4, 8, 2], [6, 7, 2], [8, 6, 4], [12, 4, 4], [16, 7, 2], [18, 9, 2], [20, 11, 4], [24, 9, 2], [26, 8, 2], [28, 7, 4]],
+  },
 ];
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -160,56 +182,104 @@ export class AudioSys {
     if (!this.ctx) { this.pendingStyle = style; return; }
     if (style === this.style && this.timer) return;
     this.stopMusic();
-    this.style = style;
+    this.style = style; this.hype = false;
+    const ctx = this.ctx;
+    if (!this.duck) {
+      // ducking: graves e pad "respiram" a cada bumbo
+      this.duck = ctx.createGain(); this.duck.connect(this.musicBus);
+      this.verb = ctx.createConvolver();
+      const len = ctx.sampleRate * 2.2, ir = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+      this.verb.buffer = ir;
+      this.verbG = ctx.createGain(); this.verbG.gain.value = 0.35;
+      this.verb.connect(this.verbG); this.verbG.connect(this.musicBus);
+    }
     const S = STYLES[style];
-    this.step = 0; this.next = this.ctx.currentTime + 0.1;
+    this.step = 0; this.next = ctx.currentTime + 0.1;
     const spb = 60 / S.bpm / 4;
     this.timer = setInterval(() => {
       if (!this.ctx) return;
       while (this.next < this.ctx.currentTime + 0.15) { this.playStep(S, this.step, this.next, spb); this.next += spb; this.step++; }
     }, 25);
   }
+  setHype(on) { this.hype = on; }
   stopMusic() { if (this.timer) clearInterval(this.timer); this.timer = null; this.style = -1; }
+
+  voice(type, freq, t, dur, vol, dest, { cutoff = 2400, detune = 0, attack = 0.005, glide = 0 } = {}) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator(); o.type = type; o.detune.value = detune;
+    if (glide) { o.frequency.setValueAtTime(freq * glide, t); o.frequency.exponentialRampToValueAtTime(freq, t + 0.05); } else o.frequency.value = freq;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + attack);
+    g.gain.setValueAtTime(vol, t + Math.max(attack, dur * 0.7)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f); f.connect(g); for (const d of dest) g.connect(d);
+    o.start(t); o.stop(t + dur + 0.05);
+    return o;
+  }
 
   playStep(S, step, t, spb) {
     const ctx = this.ctx, bus = this.musicBus;
-    const bar = Math.floor(step / 16) % S.prog.length, st = step % 16;
-    const [off, q] = S.prog[bar];
-    const root = S.key + off;
-    const third = q === 'm' ? 3 : 4;
-    const chord = [0, third, 7, 12];
+    const bar = Math.floor(step / 16), st = step % 16;
+    // forma: 4 compassos de introdução, depois ciclo de 12 (A, A, B, B, A oitava acima, B)
+    const intro = bar < 4;
+    const cyc = intro ? -1 : (bar - 4) % 12;
+    const chorus = cyc >= 4;
+    const [off, q] = S.prog[bar % S.prog.length];
+    const root = S.key + off, third = q === 'm' ? 3 : 4;
     const when = t - ctx.currentTime;
-    // bumbo
+    const hype = this.hype;
+    const section = !intro && st === 0 && cyc % 4 === 0;
+
+    // bateria
     if (st % 4 === 0) {
       const o = ctx.createOscillator(); o.type = 'sine';
-      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-      o.connect(g); g.connect(bus); o.start(t); o.stop(t + 0.25);
+      o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.16);
+      const g = ctx.createGain(); g.gain.setValueAtTime(1.0, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      o.connect(g); g.connect(bus); o.start(t); o.stop(t + 0.32);
+      this.noiseHit(0.015, 0.25, 'highpass', 3000, 2500, when, bus);
+      this.duck.gain.cancelScheduledValues(t);
+      this.duck.gain.setValueAtTime(0.35, t); this.duck.gain.linearRampToValueAtTime(1, t + spb * 3);
     }
-    if (st === 4 || st === 12) this.noiseHit(0.18, 0.4, 'highpass', 1500, 900, when, bus);
-    if (st % 2 === 1) this.noiseHit(0.04, 0.12, 'highpass', 7000, 6000, when, bus);
-    // baixo em colcheias
-    if (st % 2 === 0) {
-      const n = root + (st % 4 === 2 ? 12 : 0);
-      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(n);
-      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(200, t + spb * 1.8);
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.28, t); g.gain.exponentialRampToValueAtTime(0.001, t + spb * 1.9);
-      o.connect(f); f.connect(g); g.connect(bus); o.start(t); o.stop(t + spb * 2);
+    if (st === 4 || st === 12) {
+      this.noiseHit(0.22, 0.45, 'bandpass', 1800, 1200, when, bus, 0.8);
+      this.noiseHit(0.3, 0.25, 'bandpass', 1800, 1200, when, this.verb, 0.8);
+      this.voice('triangle', 190, t, 0.1, 0.25, [bus]);
+      if (chorus || hype) this.noiseHit(0.12, 0.3, 'bandpass', 1100, 900, when + 0.012, bus, 1.5);
+    }
+    if (!intro && st === 14 && bar % 2 === 1) this.noiseHit(0.12, 0.3, 'bandpass', 1800, 1200, when, bus, 0.8);
+    const hatEvery = chorus || hype ? 1 : 2;
+    if (st % hatEvery === 0 && st % 4 !== 0) this.noiseHit(st % 4 === 2 ? 0.09 : 0.03, st % 4 === 2 ? 0.14 : 0.08, 'highpass', 8000, 7000, when, bus);
+    if (section) this.noiseHit(1.6, 0.35, 'highpass', 5000, 3000, when, this.verb);
+
+    // baixo pulsando em colcheias
+    if (st % 2 === 0 || chorus) {
+      const n = root - 12 + (st % 8 === 6 ? 12 : 0);
+      this.voice('sawtooth', mtof(n), t, spb * (chorus ? 0.9 : 1.8), 0.24, [this.duck], { cutoff: 500 + (chorus ? 500 : 200) });
     }
     // arpejo
-    const an = root + 24 + chord[[0, 1, 2, 3, 2, 1, 0, 2][st % 8]];
-    const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = mtof(an);
-    const g = ctx.createGain(); g.gain.setValueAtTime(0.055, t); g.gain.exponentialRampToValueAtTime(0.001, t + spb * 0.9);
-    o.connect(g); g.connect(bus); g.connect(this.delay); o.start(t); o.stop(t + spb);
+    if (!intro || bar >= 2) {
+      const pat = [0, third, 7, 12, 7, third, 12, 7 + 12];
+      const an = root + 12 + pat[st % 8];
+      this.voice('square', mtof(an), t, spb * 0.8, hype ? 0.06 : 0.045, [bus, this.delay], { cutoff: chorus ? 3200 : 1800 });
+    }
     // pad
     if (st === 0) {
       const dur = spb * 16;
-      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400;
-      const pg = ctx.createGain(); pg.gain.setValueAtTime(0.0001, t); pg.gain.linearRampToValueAtTime(0.05, t + 0.4); pg.gain.linearRampToValueAtTime(0.0001, t + dur);
-      f.connect(pg); pg.connect(bus);
-      for (const n of [0, third, 7]) for (const det of [-6, 6]) {
-        const po = ctx.createOscillator(); po.type = 'sawtooth'; po.frequency.value = mtof(root + 12 + n); po.detune.value = det;
-        po.connect(f); po.start(t); po.stop(t + dur + 0.05);
+      for (const n of [0, third, 7, 12]) for (const det of [-9, 9]) this.voice('sawtooth', mtof(root + n), t, dur, 0.022, [this.duck, this.verb], { cutoff: 1500, detune: det, attack: 0.35 });
+    }
+    // melodia
+    if (!intro) {
+      const phrase = [S.A, S.A, S.B, S.B, S.A, S.B][Math.floor(cyc / 2)];
+      const up = Math.floor(cyc / 2) === 4 || hype ? 12 : 0;
+      const pos = (bar % 2) * 16 + st;
+      for (const [p, deg, len] of phrase) {
+        if (p !== pos) continue;
+        const n = S.key + 12 + SCALE[deg % SCALE.length] + up;
+        const dur = spb * len;
+        for (const det of [-6, 6]) {
+          const o = this.voice(S.lead, mtof(n), t, dur, S.lead === 'triangle' ? 0.09 : 0.05, [bus, this.delay, this.verb], { cutoff: S.lead === 'triangle' ? 4000 : 2600, detune: det, glide: 0.97 });
+          if (dur > spb * 2) { const lfo = ctx.createOscillator(); lfo.frequency.value = 5.5; const lg = ctx.createGain(); lg.gain.value = 9; lfo.connect(lg); lg.connect(o.detune); lfo.start(t + 0.15); lfo.stop(t + dur); }
+        }
       }
     }
   }

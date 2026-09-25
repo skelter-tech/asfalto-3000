@@ -157,7 +157,7 @@ function startRace(index) {
     input.calibrate();
     $('#h-lap').textContent = `1/${race.laps}`;
     audio.music(PLANETS[RACES[index].planet].music);
-    audio.weather(world.weather);
+    audio.weather(world.weather); audio.setHype(false);
     $('.pos').hidden = race.tt; $('#h-tt').hidden = !race.tt;
     setupRender();
   });
@@ -441,7 +441,7 @@ function updateHud() {
         n.textContent = 'VAI!'; n.className = 'count-n go';
         setTimeout(() => { cnt.hidden = true; }, 900);
       }
-    } else if (e.type === 'msg') msg(e.text, e.kind);
+    } else if (e.type === 'msg') { msg(e.text, e.kind); if (e.kind === 'final') audio.setHype(true); }
     else if (e.type === 'nitro') msg('NITRO!', 'nitro');
     else if (e.type === 'finish') msg(race.tt ? 'CHEGADA!' : e.pos === 1 ? 'VITÓRIA!' : `${e.pos}º LUGAR`, e.pos <= 3 ? 'good' : 'lap');
   }
@@ -517,7 +517,7 @@ function frame(now) {
 addEventListener('resize', setupRender);
 input.tiltOn = save.opts.steer === 'inclinar'; input.tiltInvert = !!save.opts.tiltInvert;
 // gancho para testes automatizados
-window.__asfalto = { get race() { return race; }, get state() { return state; }, input, save: () => save };
+window.__asfalto = { get race() { return race; }, get state() { return state; }, input, audio, save: () => save };
 input.bindTouch($('#touch'));
 if (IS_TOUCH) $('#start-hint').textContent = 'Toque para começar';
 
